@@ -1,6 +1,5 @@
-
 export interface CorpsMember {
-  id: string; // Added for unique identification during edits
+  id: string;
   sn: number;
   stateCode: string;
   fullName: string;

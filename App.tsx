@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { 
   Upload, FileText, Users, MapPin, Download, Trash2, Search, 
@@ -60,7 +59,7 @@ const App: React.FC = () => {
     setShowSuccess(false);
     
     try {
-      // Small delay for scanning animation
+      // Simulation steps for UX
       await new Promise(r => setTimeout(r, 1000));
       setState(s => ({ ...s, processingStep: 'extracting' }));
       
@@ -84,19 +83,10 @@ const App: React.FC = () => {
     } catch (err: any) {
       let userFriendlyError = "An unexpected error occurred during extraction. Please try again.";
       
-      switch (err.message) {
-        case "AUTH_ERROR":
-          userFriendlyError = "Authentication failed. The AI service access is restricted. Please check your configuration.";
-          break;
-        case "SERVICE_OVERLOAD":
-          userFriendlyError = "The extraction service is currently busy handling too many requests. Please wait 30 seconds and try again.";
-          break;
-        case "NETWORK_ERROR":
-          userFriendlyError = "Connection lost. Please check your internet connectivity and ensure the files aren't too large.";
-          break;
-        case "RECOGNITION_ERROR":
-          userFriendlyError = "No corps member data could be identified. Try using higher quality photos or scanned PDF documents.";
-          break;
+      if (err.message.includes("API_KEY")) {
+        userFriendlyError = "Authentication failed. The AI service access is restricted. Please check your configuration.";
+      } else if (err.message.includes("503") || err.message.includes("overloaded")) {
+        userFriendlyError = "The extraction service is currently busy. Please wait 30 seconds and try again.";
       }
 
       setState(prev => ({ 
@@ -257,7 +247,7 @@ const App: React.FC = () => {
                       {uploadedFiles.map((f, i) => (
                         <div key={i} className="flex items-center justify-between p-4 bg-[#f8faf9] rounded-2xl border border-slate-100 group/item">
                           <div className="flex items-center gap-4 truncate">
-                            <div className="p-2 bg-white rounded-xl shadow-sm"><FileText className="w-4 h-4 text-green-600" /></div>
+                            <div className="p-2 bg-white rounded-xl shadow-sm">{f.mimeType.includes('csv') ? <FileSpreadsheet className="w-4 h-4 text-green-600" /> : <FileText className="w-4 h-4 text-green-600" />}</div>
                             <span className="text-xs font-black truncate text-slate-600 uppercase tracking-tighter">{f.name}</span>
                           </div>
                           <button onClick={() => setUploadedFiles(prev => prev.filter((_, idx) => idx !== i))} className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-all">
@@ -506,12 +496,12 @@ const App: React.FC = () => {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50">
-                            {filteredMembers.map((m, i) => (
+                            {filteredMembers.map((m) => (
                               <tr key={m.id} className="hover:bg-green-50/20 transition-all group">
                                 <td className="px-8 py-5 text-slate-300 font-mono text-[10px]">{m.sn}</td>
                                 <td className="px-8 py-5">
                                   <input 
-                                    className="bg-transparent border-none font-black text-slate-800 tracking-tighter w-full focus:outline-none focus:ring-2 focus:ring-green-500/10 rounded"
+                                    className="bg-transparent border-none font-black text-slate-800 tracking-tighter w-full focus:outline-none focus:ring-2 focus:ring-green-500/10 rounded uppercase"
                                     value={m.stateCode}
                                     onChange={(e) => handleEditChange(m.id, 'stateCode', e.target.value)}
                                   />
@@ -525,10 +515,10 @@ const App: React.FC = () => {
                                 </td>
                                 <td className="px-8 py-5">
                                   <button 
-                                    onClick={() => handleEditChange(m.id, 'gender', m.gender === 'M' ? 'F' : 'M')}
-                                    className={`px-3 py-1 rounded-lg text-[9px] font-black shadow-sm ${m.gender === 'F' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}
+                                    onClick={() => handleEditChange(m.id, 'gender', m.gender.toUpperCase().startsWith('M') ? 'F' : 'M')}
+                                    className={`px-3 py-1 rounded-lg text-[9px] font-black shadow-sm ${m.gender.toUpperCase().startsWith('F') ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}
                                   >
-                                    {m.gender}
+                                    {m.gender.charAt(0).toUpperCase()}
                                   </button>
                                 </td>
                                 <td className="px-8 py-5">
@@ -567,12 +557,12 @@ const App: React.FC = () => {
                               </div>
                             </div>
                             <div className="p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                              {members.map((m, idx) => (
+                              {members.map((m) => (
                                 <div key={m.id} className="p-5 rounded-2xl bg-[#fcfdfc] border border-slate-50 hover:border-green-200 transition-all relative overflow-hidden group">
-                                  <div className={`absolute top-0 right-0 w-1 h-full ${m.gender === 'F' ? 'bg-pink-300' : 'bg-blue-300'}`}></div>
+                                  <div className={`absolute top-0 right-0 w-1 h-full ${m.gender.toUpperCase().startsWith('F') ? 'bg-pink-300' : 'bg-blue-300'}`}></div>
                                   <div className="flex items-start gap-4">
-                                    <div className={`w-12 h-12 rounded-[1rem] flex items-center justify-center font-black text-sm shadow-inner shrink-0 ${m.gender === 'F' ? 'bg-pink-50 text-pink-600' : 'bg-blue-50 text-blue-600'}`}>
-                                      {m.fullName.charAt(0)}
+                                    <div className={`w-12 h-12 rounded-[1rem] flex items-center justify-center font-black text-sm shadow-inner shrink-0 ${m.gender.toUpperCase().startsWith('F') ? 'bg-pink-50 text-pink-600' : 'bg-blue-50 text-blue-600'}`}>
+                                      {m.fullName.charAt(0).toUpperCase()}
                                     </div>
                                     <div className="min-w-0">
                                       <p className="text-xs font-black text-slate-900 leading-tight uppercase truncate">{m.fullName}</p>

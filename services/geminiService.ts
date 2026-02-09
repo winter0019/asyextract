@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { ExtractionResponse } from "../types.ts";
 
@@ -76,16 +75,9 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
     });
 
     const text = response.text;
-    if (!text) {
-      throw new Error("EMPTY_RESPONSE");
-    }
+    if (!text) throw new Error("AI returned empty content");
     
     const parsed = JSON.parse(text) as ExtractionResponse;
-    
-    if (!parsed.members || parsed.members.length === 0) {
-      throw new Error("NO_MEMBERS_FOUND");
-    }
-
     // Basic cleanup and sorting
     parsed.members = parsed.members.map(m => ({
       ...m,
@@ -93,22 +85,8 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
     })).sort((a, b) => (a.sn || 0) - (b.sn || 0));
     
     return parsed;
-  } catch (error: any) {
+  } catch (error) {
     console.error("Extraction failed:", error);
-    
-    // Classify errors for the frontend
-    const message = error.message || "";
-    
-    if (message.includes("API_KEY_INVALID") || message.includes("401") || message.includes("403")) {
-      throw new Error("AUTH_ERROR");
-    } else if (message.includes("503") || message.includes("overloaded")) {
-      throw new Error("SERVICE_OVERLOAD");
-    } else if (message.includes("NetworkError") || message.includes("Failed to fetch")) {
-      throw new Error("NETWORK_ERROR");
-    } else if (message === "EMPTY_RESPONSE" || message === "NO_MEMBERS_FOUND") {
-      throw new Error("RECOGNITION_ERROR");
-    }
-    
     throw error;
   }
 };
