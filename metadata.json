@@ -1,0 +1,5 @@
+{
+  "name": "NYSC Data Extractor & PPA Organizer",
+  "description": "An intelligent tool designed to extract corps member details from clearance lists and automatically group them by their Place of Primary Assignment (PPA) using AI-powered image recognition.",
+  "requestFramePermissions": []
+}
