@@ -6,8 +6,8 @@ import {
   CheckCircle2, TrendingUp, Info, List, LayoutGrid, ChevronRight,
   Printer, Share2
 } from 'lucide-react';
-import { extractCorpsData, FileData } from './services/geminiService';
-import { CorpsMember, AppState } from './types';
+import { extractCorpsData, FileData } from './services/geminiService.ts';
+import { CorpsMember, AppState } from './types.ts';
 
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>({

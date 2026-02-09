@@ -1,8 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { ExtractionResponse } from "../types";
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+import { ExtractionResponse } from "../types.ts";
 
 export interface FileData {
   data: string; // base64 for images/pdf, or raw text for csv
@@ -11,6 +9,9 @@ export interface FileData {
 }
 
 export const extractCorpsData = async (files: FileData[]): Promise<ExtractionResponse> => {
+  // Initialize inside the function to avoid top-level ReferenceErrors if process is not defined yet
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
   // Using gemini-3-pro-preview for complex reasoning tasks like cross-referencing tables across multiple images
   const model = 'gemini-3-pro-preview';
 
