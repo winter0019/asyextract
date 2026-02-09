@@ -60,22 +60,14 @@ const App: React.FC = () => {
     setShowSuccess(false);
     
     try {
-      // Simulate steps for UX
-      setTimeout(() => setState(s => ({ ...s, processingStep: 'extracting' })), 1500);
+      // Small delay for scanning animation
+      await new Promise(r => setTimeout(r, 1000));
+      setState(s => ({ ...s, processingStep: 'extracting' }));
       
       const result = await extractCorpsData(uploadedFiles);
       
       setState(s => ({ ...s, processingStep: 'validating' }));
-
-      if (!result.members || result.members.length === 0) {
-        setState(prev => ({ 
-          ...prev, 
-          error: "AI could not find any corps member data. Please ensure documents are clearly readable.", 
-          isProcessing: false,
-          processingStep: 'idle'
-        }));
-        return;
-      }
+      await new Promise(r => setTimeout(r, 500));
 
       setState(prev => ({ 
         ...prev, 
@@ -89,10 +81,27 @@ const App: React.FC = () => {
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 300);
-    } catch (err) {
+    } catch (err: any) {
+      let userFriendlyError = "An unexpected error occurred during extraction. Please try again.";
+      
+      switch (err.message) {
+        case "AUTH_ERROR":
+          userFriendlyError = "Authentication failed. The AI service access is restricted. Please check your configuration.";
+          break;
+        case "SERVICE_OVERLOAD":
+          userFriendlyError = "The extraction service is currently busy handling too many requests. Please wait 30 seconds and try again.";
+          break;
+        case "NETWORK_ERROR":
+          userFriendlyError = "Connection lost. Please check your internet connectivity and ensure the files aren't too large.";
+          break;
+        case "RECOGNITION_ERROR":
+          userFriendlyError = "No corps member data could be identified. Try using higher quality photos or scanned PDF documents.";
+          break;
+      }
+
       setState(prev => ({ 
         ...prev, 
-        error: "Failed to extract data. The AI might be busy or the files were unreadable.", 
+        error: userFriendlyError, 
         isProcessing: false,
         processingStep: 'idle'
       }));
@@ -128,6 +137,8 @@ const App: React.FC = () => {
     setState(prev => ({ ...prev, data: [...prev.data, newMember] }));
     setShowAddForm(false);
   };
+
+  const dismissError = () => setState(prev => ({ ...prev, error: null }));
 
   // --- Memos & Computations ---
 
@@ -279,6 +290,25 @@ const App: React.FC = () => {
                 )}
               </div>
             </section>
+
+            {/* Error Message Box */}
+            {state.error && (
+              <div className="bg-red-50 border border-red-200 rounded-[2rem] p-6 shadow-lg shadow-red-900/5 animate-in slide-in-from-left-4 duration-300 relative group">
+                <div className="flex items-start gap-4">
+                  <div className="p-2 bg-red-100 rounded-xl"><AlertCircle className="w-5 h-5 text-red-600" /></div>
+                  <div className="pr-8">
+                    <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1">Processing Error</p>
+                    <p className="text-xs font-bold text-red-800 leading-relaxed uppercase tracking-tight">{state.error}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={dismissError}
+                  className="absolute top-4 right-4 p-2 text-red-300 hover:text-red-600 hover:bg-red-100 rounded-full transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
 
             {/* 2. PPA Groups Sidebar */}
             {groups.length > 0 && (
