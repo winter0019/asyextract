@@ -1,5 +1,6 @@
 
 export interface CorpsMember {
+  id: string; // Added for unique identification during edits
   sn: number;
   stateCode: string;
   fullName: string;
@@ -14,6 +15,7 @@ export interface ExtractionResponse {
 
 export interface AppState {
   isProcessing: boolean;
+  processingStep: 'idle' | 'scanning' | 'extracting' | 'validating';
   data: CorpsMember[];
   error: string | null;
   selectedGroup: string | null;

@@ -29,14 +29,16 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
     
     CONTEXT: 
     - These are likely official clearance lists, payrolls, or posting documents.
-    - Common columns: S/N (Serial), ID/Code, Full Name, Gender, Contact/Phone, and Organization/PPA.
+    - Common columns: S/N (Serial), ID/Code (e.g., NY/24B/1234), Full Name, Gender, Contact/Phone, and Organization/PPA.
     
     EXTRACTION REQUIREMENTS:
     1. Identify tables and rows across all provided files.
     2. Normalize Name to UPPERCASE.
-    3. Normalize Gender to "M" or "F".
-    4. If a field like "Company" or "PPA" isn't explicitly on every row, infer it from headers or preceding group labels.
-    5. Ensure you extract EVERY person listed.
+    3. Normalize Gender to exactly "M" or "F".
+    4. Normalize Phone to a standard format if possible.
+    5. Generate a unique "id" (string) for every record extracted.
+    6. If a field like "Company" or "PPA" isn't explicitly on every row, infer it from headers or preceding group labels.
+    7. Ensure you extract EVERY person listed. Do not skip anyone.
     
     Return the data in the requested JSON structure.
   `;
@@ -46,7 +48,7 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
       model,
       contents: { parts: [...parts, { text: prompt }] },
       config: {
-        thinkingConfig: { thinkingBudget: 4000 },
+        thinkingConfig: { thinkingBudget: 6000 },
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -56,6 +58,7 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
               items: {
                 type: Type.OBJECT,
                 properties: {
+                  id: { type: Type.STRING },
                   sn: { type: Type.NUMBER },
                   stateCode: { type: Type.STRING },
                   fullName: { type: Type.STRING },
@@ -63,7 +66,7 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
                   phone: { type: Type.STRING },
                   companyName: { type: Type.STRING },
                 },
-                required: ["sn", "stateCode", "fullName", "gender", "phone", "companyName"],
+                required: ["id", "sn", "stateCode", "fullName", "gender", "phone", "companyName"],
               },
             },
           },
@@ -76,7 +79,12 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
     if (!text) throw new Error("AI returned empty content");
     
     const parsed = JSON.parse(text) as ExtractionResponse;
-    parsed.members.sort((a, b) => (a.sn || 0) - (b.sn || 0));
+    // Basic cleanup and sorting
+    parsed.members = parsed.members.map(m => ({
+      ...m,
+      gender: m.gender.toUpperCase().startsWith('M') ? 'M' : 'F'
+    })).sort((a, b) => (a.sn || 0) - (b.sn || 0));
+    
     return parsed;
   } catch (error) {
     console.error("Extraction failed:", error);

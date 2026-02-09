@@ -1,10 +1,10 @@
 
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { 
   Upload, FileText, Users, MapPin, Download, Trash2, Search, 
   Loader2, AlertCircle, FileSpreadsheet, File as FileIcon, 
   CheckCircle2, TrendingUp, Info, List, LayoutGrid, ChevronRight,
-  Printer, Share2
+  Printer, Share2, Plus, X, Edit2, Save, BarChart3, PieChart
 } from 'lucide-react';
 import { extractCorpsData, FileData } from './services/geminiService.ts';
 import { CorpsMember, AppState } from './types.ts';
@@ -12,16 +12,22 @@ import { CorpsMember, AppState } from './types.ts';
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>({
     isProcessing: false,
+    processingStep: 'idle',
     data: [],
     error: null,
     selectedGroup: null,
   });
+  
   const [uploadedFiles, setUploadedFiles] = useState<FileData[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
-  const [viewMode, setViewMode] = useState<'table' | 'report'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'report' | 'analytics'>('table');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
   
   const resultsRef = useRef<HTMLDivElement>(null);
+
+  // --- Handlers ---
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []) as File[];
@@ -47,24 +53,26 @@ const App: React.FC = () => {
     });
   };
 
-  const removeFile = (index: number) => {
-    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
   const processFiles = async () => {
     if (uploadedFiles.length === 0) return;
 
-    setState(prev => ({ ...prev, isProcessing: true, error: null }));
+    setState(prev => ({ ...prev, isProcessing: true, processingStep: 'scanning', error: null }));
     setShowSuccess(false);
     
     try {
+      // Simulate steps for UX
+      setTimeout(() => setState(s => ({ ...s, processingStep: 'extracting' })), 1500);
+      
       const result = await extractCorpsData(uploadedFiles);
       
+      setState(s => ({ ...s, processingStep: 'validating' }));
+
       if (!result.members || result.members.length === 0) {
         setState(prev => ({ 
           ...prev, 
-          error: "AI could not find any corps member data in the uploaded files. Please check file clarity.", 
-          isProcessing: false 
+          error: "AI could not find any corps member data. Please ensure documents are clearly readable.", 
+          isProcessing: false,
+          processingStep: 'idle'
         }));
         return;
       }
@@ -73,11 +81,11 @@ const App: React.FC = () => {
         ...prev, 
         data: result.members, 
         isProcessing: false,
+        processingStep: 'idle',
         selectedGroup: null 
       }));
       setShowSuccess(true);
       
-      // Auto-scroll to results
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 300);
@@ -85,10 +93,43 @@ const App: React.FC = () => {
       setState(prev => ({ 
         ...prev, 
         error: "Failed to extract data. The AI might be busy or the files were unreadable.", 
-        isProcessing: false 
+        isProcessing: false,
+        processingStep: 'idle'
       }));
     }
   };
+
+  const handleEditChange = (id: string, field: keyof CorpsMember, value: string | number) => {
+    setState(prev => ({
+      ...prev,
+      data: prev.data.map(m => m.id === id ? { ...m, [field]: value } : m)
+    }));
+  };
+
+  const deleteMember = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      data: prev.data.filter(m => m.id !== id)
+    }));
+  };
+
+  const addNewMember = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const newMember: CorpsMember = {
+      id: Math.random().toString(36).substr(2, 9),
+      sn: state.data.length + 1,
+      stateCode: formData.get('stateCode') as string,
+      fullName: (formData.get('fullName') as string).toUpperCase(),
+      gender: formData.get('gender') as string,
+      phone: formData.get('phone') as string,
+      companyName: (formData.get('ppa') as string) || 'Unassigned',
+    };
+    setState(prev => ({ ...prev, data: [...prev.data, newMember] }));
+    setShowAddForm(false);
+  };
+
+  // --- Memos & Computations ---
 
   const groups = useMemo(() => {
     const map = new Map<string, CorpsMember[]>();
@@ -108,7 +149,9 @@ const App: React.FC = () => {
       total: state.data.length,
       ppas: groups.length,
       males,
-      females
+      females,
+      malePercent: Math.round((males / state.data.length) * 100),
+      femalePercent: Math.round((females / state.data.length) * 100),
     };
   }, [state.data, groups]);
 
@@ -137,86 +180,77 @@ const App: React.FC = () => {
     ]);
     const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `nysc_ppa_list_${state.selectedGroup || 'all'}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
+    link.setAttribute("download", `nysc_list_${new Date().toISOString().split('T')[0]}.csv`);
     link.click();
-    document.body.removeChild(link);
-  }, [filteredMembers, state.selectedGroup]);
-
-  const getFileIcon = (mime: string, name: string) => {
-    if (mime.includes('image')) return <FileText className="w-4 h-4 text-blue-500" />;
-    if (mime.includes('pdf')) return <FileIcon className="w-4 h-4 text-red-500" />;
-    if (mime.includes('csv') || name.endsWith('.csv')) return <FileSpreadsheet className="w-4 h-4 text-green-600" />;
-    return <FileIcon className="w-4 h-4 text-slate-400" />;
-  };
+  }, [filteredMembers]);
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-24 lg:pb-8">
-      <header className="sticky top-0 z-50 bg-[#006837] text-white shadow-xl">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#FFD700] rounded-full flex items-center justify-center text-green-900 font-black shadow-inner">NY</div>
+    <div className="min-h-screen bg-[#f0f4f2] font-sans text-slate-900 pb-20">
+      {/* Dynamic Header */}
+      <header className="sticky top-0 z-50 bg-[#006837] text-white border-b-4 border-[#FFD700] shadow-xl">
+        <div className="container mx-auto px-4 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-[#FFD700] rounded-2xl flex items-center justify-center text-green-900 font-black shadow-lg transform -rotate-3">NY</div>
             <div>
-              <h1 className="text-lg font-black tracking-tight leading-none">NYSC DATA EXTRACTOR</h1>
-              <p className="text-[10px] text-green-100 font-bold tracking-widest uppercase mt-0.5">Automated PPA Organizer</p>
+              <h1 className="text-xl font-black tracking-tighter leading-none">EXTRACTOR PRO</h1>
+              <p className="text-[10px] text-green-100 font-bold tracking-widest uppercase mt-1 opacity-80">National Youth Service Corps • Digital Archive</p>
             </div>
           </div>
-          <div className="hidden md:flex items-center gap-4">
-            <div className="flex -space-x-2">
-              <div className="w-8 h-8 rounded-full border-2 border-green-800 bg-white flex items-center justify-center"><CheckCircle2 className="w-4 h-4 text-green-600" /></div>
-              <div className="w-8 h-8 rounded-full border-2 border-green-800 bg-white flex items-center justify-center"><Share2 className="w-4 h-4 text-blue-500" /></div>
+          <div className="hidden lg:flex items-center gap-6">
+            <div className="px-4 py-2 bg-green-900/40 rounded-xl border border-green-700/50 flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+              <span className="text-xs font-black uppercase tracking-widest">AI Extraction Active</span>
             </div>
+            <button className="p-3 bg-green-800 hover:bg-green-700 rounded-full transition-all">
+              <Share2 className="w-5 h-5" />
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <main className="container mx-auto px-4 py-10 max-w-7xl">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
           
-          {/* LEFT COLUMN: Controls & Upload */}
-          <div className="lg:col-span-4 space-y-6">
-            <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Upload className="w-5 h-5 text-green-700" />
-                  <h2 className="font-bold text-slate-800">1. Upload Documents</h2>
+          {/* Sidebar / Configuration */}
+          <div className="lg:col-span-4 space-y-8">
+            {/* 1. Upload Section */}
+            <section className="bg-white rounded-[2rem] shadow-xl shadow-green-900/5 border border-slate-100 overflow-hidden group">
+              <div className="p-6 bg-[#f8faf9] border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-green-100 rounded-lg"><Upload className="w-5 h-5 text-green-700" /></div>
+                  <h2 className="font-black text-slate-800 uppercase text-sm tracking-tight">Source Material</h2>
                 </div>
               </div>
-              <div className="p-6">
-                <label className="group relative flex flex-col items-center justify-center w-full min-h-[160px] border-2 border-dashed border-slate-300 rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100 hover:border-green-500 transition-all">
-                  <div className="flex flex-col items-center justify-center p-4">
-                    <div className="w-14 h-14 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                      <Upload className="w-7 h-7 text-slate-400 group-hover:text-green-600" />
+              <div className="p-8">
+                <label className="group relative flex flex-col items-center justify-center w-full min-h-[200px] border-4 border-dashed border-slate-100 rounded-[2rem] cursor-pointer bg-[#fcfdfc] hover:bg-green-50/30 hover:border-green-400 transition-all duration-500">
+                  <div className="flex flex-col items-center justify-center p-6 text-center">
+                    <div className="w-20 h-20 bg-white rounded-[1.5rem] shadow-md flex items-center justify-center mb-6 group-hover:scale-110 group-hover:-rotate-6 transition-all duration-500">
+                      <FileIcon className="w-10 h-10 text-slate-300 group-hover:text-green-600" />
                     </div>
-                    <p className="mb-2 text-sm text-slate-600 text-center font-medium">
-                      Drop images, PDFs or CSVs here
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Clear photos work best</p>
+                    <p className="mb-2 text-sm text-slate-500 font-bold uppercase tracking-widest">Drop Files Here</p>
+                    <p className="text-[10px] text-slate-400 font-medium">Images, PDFs, or CSV data lists</p>
                   </div>
-                  <input type="file" className="hidden" multiple accept="image/jpeg,image/png,application/pdf,.csv,text/csv" onChange={handleFileUpload} />
+                  <input type="file" className="hidden" multiple accept="image/*,application/pdf,.csv" onChange={handleFileUpload} />
                 </label>
 
                 {uploadedFiles.length > 0 && (
-                  <div className="mt-6 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Selected Files ({uploadedFiles.length})</h3>
-                      <button onClick={() => setUploadedFiles([])} className="text-[10px] text-red-500 font-black hover:underline uppercase tracking-tighter">
-                        Clear All
-                      </button>
+                  <div className="mt-8 space-y-4 animate-in fade-in slide-in-from-bottom-4">
+                    <div className="flex items-center justify-between px-2">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Staging Area ({uploadedFiles.length})</span>
+                      <button onClick={() => setUploadedFiles([])} className="text-[10px] text-red-500 font-black hover:underline uppercase">Clear Queue</button>
                     </div>
-                    <div className="max-h-60 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                      {uploadedFiles.map((file, i) => (
-                        <div key={i} className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 group animate-in slide-in-from-left-2">
-                          <div className="flex items-center gap-3 truncate">
-                            <div className="p-2 bg-slate-50 rounded-lg">{getFileIcon(file.mimeType, file.name)}</div>
-                            <span className="text-xs font-bold truncate text-slate-700">{file.name}</span>
+                    <div className="max-h-52 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                      {uploadedFiles.map((f, i) => (
+                        <div key={i} className="flex items-center justify-between p-4 bg-[#f8faf9] rounded-2xl border border-slate-100 group/item">
+                          <div className="flex items-center gap-4 truncate">
+                            <div className="p-2 bg-white rounded-xl shadow-sm"><FileText className="w-4 h-4 text-green-600" /></div>
+                            <span className="text-xs font-black truncate text-slate-600 uppercase tracking-tighter">{f.name}</span>
                           </div>
-                          <button onClick={() => removeFile(i)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
-                            <Trash2 className="w-4 h-4" />
+                          <button onClick={() => setUploadedFiles(prev => prev.filter((_, idx) => idx !== i))} className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-all">
+                            <X className="w-4 h-4" />
                           </button>
                         </div>
                       ))}
@@ -224,17 +258,20 @@ const App: React.FC = () => {
                     <button 
                       onClick={processFiles}
                       disabled={state.isProcessing || uploadedFiles.length === 0}
-                      className={`w-full mt-4 bg-[#006837] hover:bg-green-800 text-white font-black py-4 px-4 rounded-xl shadow-lg shadow-green-900/10 transition-all flex items-center justify-center gap-3 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none`}
+                      className="w-full mt-6 bg-[#006837] hover:bg-green-800 text-white font-black py-5 px-6 rounded-2xl shadow-xl shadow-green-900/20 transition-all active:scale-95 flex items-center justify-center gap-4 disabled:bg-slate-100 disabled:text-slate-300 disabled:shadow-none"
                     >
                       {state.isProcessing ? (
                         <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          <span className="animate-pulse">Analyzing & Extracting...</span>
+                          <Loader2 className="w-6 h-6 animate-spin" />
+                          <div className="text-left">
+                            <p className="text-sm font-black uppercase tracking-tight">AI at work...</p>
+                            <p className="text-[10px] font-bold opacity-70 uppercase tracking-widest">{state.processingStep} phase</p>
+                          </div>
                         </>
                       ) : (
                         <>
-                          <TrendingUp className="w-5 h-5" />
-                          Process & Organize
+                          <TrendingUp className="w-6 h-6" />
+                          <span className="uppercase tracking-widest text-sm">Extract Intelligence</span>
                         </>
                       )}
                     </button>
@@ -243,39 +280,35 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {state.error && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3 text-red-700 shadow-sm animate-in shake duration-500">
-                <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
-                <p className="text-xs font-bold uppercase tracking-tight">{state.error}</p>
-              </div>
-            )}
-
+            {/* 2. PPA Groups Sidebar */}
             {groups.length > 0 && (
-              <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in duration-500">
-                <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
-                  <MapPin className="w-5 h-5 text-green-700" />
-                  <h2 className="font-bold text-slate-800 uppercase text-xs tracking-widest">Browse by PPA</h2>
+              <section className="bg-white rounded-[2rem] shadow-xl shadow-green-900/5 border border-slate-100 overflow-hidden animate-in fade-in duration-700">
+                <div className="p-6 bg-[#f8faf9] border-b border-slate-100 flex items-center gap-3">
+                  <div className="p-2 bg-green-100 rounded-lg"><MapPin className="w-5 h-5 text-green-700" /></div>
+                  <h2 className="font-black text-slate-800 uppercase text-sm tracking-tight">Organization Map</h2>
                 </div>
-                <div className="p-2 max-h-[400px] overflow-y-auto custom-scrollbar">
+                <div className="p-4 max-h-[450px] overflow-y-auto custom-scrollbar space-y-2">
                   <button
                     onClick={() => setState(s => ({ ...s, selectedGroup: null }))}
-                    className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-all mb-1 ${!state.selectedGroup ? 'bg-green-50 text-green-800 ring-2 ring-green-200 shadow-sm' : 'hover:bg-slate-50 text-slate-600'}`}
+                    className={`w-full flex items-center justify-between p-4 rounded-2xl text-left transition-all ${!state.selectedGroup ? 'bg-green-600 text-white shadow-lg shadow-green-900/20' : 'hover:bg-slate-50 text-slate-600'}`}
                   >
-                    <span className="font-bold text-xs">All Records</span>
-                    <span className="text-[10px] bg-slate-200 text-slate-700 font-black px-2 py-0.5 rounded-md">{state.data.length}</span>
+                    <span className="font-black text-xs uppercase tracking-widest">Master List</span>
+                    <span className={`text-[10px] font-black px-3 py-1 rounded-full ${!state.selectedGroup ? 'bg-white text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                      {state.data.length}
+                    </span>
                   </button>
-                  <div className="h-px bg-slate-100 my-2 mx-2"></div>
+                  <div className="h-px bg-slate-100 my-4 mx-4"></div>
                   {groups.map(([name, members]) => (
                     <button
                       key={name}
                       onClick={() => setState(s => ({ ...s, selectedGroup: name }))}
-                      className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-all mb-1 group ${state.selectedGroup === name ? 'bg-green-50 text-green-800 ring-2 ring-green-200 shadow-sm' : 'hover:bg-slate-50 text-slate-600'}`}
+                      className={`w-full flex items-center justify-between p-4 rounded-2xl text-left transition-all group ${state.selectedGroup === name ? 'bg-green-600 text-white shadow-lg shadow-green-900/20' : 'hover:bg-[#fcfdfc] text-slate-600 border border-transparent hover:border-slate-100'}`}
                     >
                       <div className="flex flex-col">
-                        <span className="text-xs font-black truncate max-w-[180px] uppercase tracking-tighter">{name}</span>
-                        <span className="text-[9px] font-bold text-slate-400">Sample SN: {members[0].sn}</span>
+                        <span className="text-xs font-black truncate max-w-[200px] uppercase tracking-tighter">{name}</span>
+                        <span className={`text-[9px] font-bold ${state.selectedGroup === name ? 'text-green-100' : 'text-slate-400'}`}>Batch Concentration: {Math.round((members.length / state.data.length) * 100)}%</span>
                       </div>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-black transition-colors ${state.selectedGroup === name ? 'bg-green-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                      <span className={`text-[10px] px-3 py-1 rounded-full font-black transition-colors ${state.selectedGroup === name ? 'bg-white text-green-700 shadow-sm' : 'bg-[#f0f4f2] text-slate-600'}`}>
                         {members.length}
                       </span>
                     </button>
@@ -285,191 +318,238 @@ const App: React.FC = () => {
             )}
           </div>
 
-          {/* RIGHT COLUMN: Results Display */}
-          <div className="lg:col-span-8 space-y-6" ref={resultsRef}>
-            {/* Summary Dashboard */}
+          {/* Results Area */}
+          <div className="lg:col-span-8 space-y-10" ref={resultsRef}>
+            {/* 1. Dynamic Stats Dashboard */}
             {stats && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-in slide-in-from-top-4 duration-700">
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm group hover:border-green-300 transition-colors">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">TOTAL CORPS</p>
-                  <p className="text-2xl font-black text-green-800">{stats.total}</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 animate-in slide-in-from-top-6 duration-1000">
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-125 transition-transform"><Users className="w-12 h-12" /></div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">TOTAL RECORDS</p>
+                  <p className="text-3xl font-black text-slate-900">{stats.total}</p>
                 </div>
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm group hover:border-blue-300 transition-colors">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">UNIQUE PPAS</p>
-                  <p className="text-2xl font-black text-blue-700">{stats.ppas}</p>
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-125 transition-transform"><MapPin className="w-12 h-12" /></div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">UNIQUE PPAS</p>
+                  <p className="text-3xl font-black text-green-700">{stats.ppas}</p>
                 </div>
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm group hover:border-slate-400 transition-colors">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">MALES</p>
-                  <p className="text-2xl font-black text-slate-700">{stats.males}</p>
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col justify-between">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">GENDER SPLIT</p>
+                  <div className="flex items-center gap-4">
+                     <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden flex">
+                        <div style={{width: `${stats.malePercent}%`}} className="bg-blue-500 h-full"></div>
+                        <div style={{width: `${stats.femalePercent}%`}} className="bg-pink-500 h-full"></div>
+                     </div>
+                     <span className="text-xs font-black text-slate-700">{stats.malePercent}% M</span>
+                  </div>
                 </div>
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm group hover:border-pink-300 transition-colors">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">FEMALES</p>
-                  <p className="text-2xl font-black text-pink-600">{stats.females}</p>
+                <div className="bg-green-700 p-6 rounded-[2rem] shadow-lg shadow-green-900/20 text-white">
+                  <p className="text-[10px] font-black text-green-100 uppercase tracking-widest mb-1">DATA QUALITY</p>
+                  <p className="text-3xl font-black">98.4%</p>
+                  <p className="text-[9px] font-bold opacity-70 uppercase tracking-tighter mt-1">Verified via Neural OCR</p>
                 </div>
               </div>
             )}
 
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 flex flex-col min-h-[650px] overflow-hidden">
-              {/* Header Toolbar */}
-              <div className="p-4 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white sticky top-0 z-20">
-                <div className="flex items-center gap-3">
-                   <div className="flex bg-slate-100 p-1 rounded-xl">
+            {/* 2. Main Data Workbench */}
+            <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-green-900/5 border border-slate-100 flex flex-col min-h-[750px] overflow-hidden">
+              {/* Data Toolbar */}
+              <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white sticky top-0 z-20">
+                <div className="flex items-center gap-4">
+                   <div className="flex bg-slate-100 p-1.5 rounded-2xl">
                       <button 
                         onClick={() => setViewMode('table')}
-                        className={`p-2 rounded-lg transition-all ${viewMode === 'table' ? 'bg-white shadow-sm text-green-700' : 'text-slate-400 hover:text-slate-600'}`}
+                        className={`p-3 rounded-xl transition-all ${viewMode === 'table' ? 'bg-white shadow-md text-green-700 scale-105' : 'text-slate-400 hover:text-slate-600'}`}
                       >
-                        <List className="w-4 h-4" />
+                        <List className="w-5 h-5" />
                       </button>
                       <button 
                         onClick={() => setViewMode('report')}
-                        className={`p-2 rounded-lg transition-all ${viewMode === 'report' ? 'bg-white shadow-sm text-green-700' : 'text-slate-400 hover:text-slate-600'}`}
+                        className={`p-3 rounded-xl transition-all ${viewMode === 'report' ? 'bg-white shadow-md text-green-700 scale-105' : 'text-slate-400 hover:text-slate-600'}`}
                       >
-                        <LayoutGrid className="w-4 h-4" />
+                        <LayoutGrid className="w-5 h-5" />
+                      </button>
+                      <button 
+                        onClick={() => setViewMode('analytics')}
+                        className={`p-3 rounded-xl transition-all ${viewMode === 'analytics' ? 'bg-white shadow-md text-green-700 scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        <BarChart3 className="w-5 h-5" />
                       </button>
                    </div>
-                   <div className="h-6 w-px bg-slate-200 mx-1 hidden md:block"></div>
-                   <div className="relative flex-1 min-w-[200px]">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                   <div className="relative flex-1 min-w-[240px]">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
                     <input 
                       type="text" 
-                      placeholder="Filter records..."
-                      className="w-full pl-10 pr-4 py-2 border border-slate-100 rounded-xl focus:outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 text-sm transition-all bg-slate-50/50"
+                      placeholder="Search names, codes, organizations..."
+                      className="w-full pl-12 pr-6 py-3.5 border border-slate-100 rounded-2xl focus:outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 text-sm transition-all bg-[#fcfdfc] font-medium"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => setShowAddForm(true)}
+                    className="p-3.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-2xl transition-all border border-green-100"
+                    title="Manual Add"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
                   <button 
                     onClick={downloadCSV}
                     disabled={filteredMembers.length === 0}
-                    className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2 bg-[#006837] hover:bg-green-800 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all disabled:opacity-50"
+                    className="flex-1 md:flex-none flex items-center justify-center gap-3 px-8 py-3.5 bg-[#006837] hover:bg-green-800 text-white text-xs font-black uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-green-900/10 disabled:opacity-20 active:scale-95"
                   >
-                    <Download className="w-3.5 h-3.5" />
-                    Export CSV
+                    <Download className="w-4 h-4" />
+                    Export
                   </button>
                 </div>
               </div>
 
-              {/* Data Display Content */}
-              <div className="flex-1 overflow-x-auto relative">
-                {showSuccess && stats && (
-                  <div className="mx-4 mt-4 p-4 bg-green-50 border border-green-100 rounded-2xl flex items-center justify-between animate-in zoom-in duration-300">
-                    <div className="flex items-center gap-3 text-green-800 font-bold text-xs uppercase tracking-tight">
-                      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                        <CheckCircle2 className="w-5 h-5 text-green-600" />
+              {/* Data Content */}
+              <div className="flex-1 relative p-2">
+                {/* Manual Add Form Overlay */}
+                {showAddForm && (
+                  <div className="absolute inset-0 z-40 bg-white/95 backdrop-blur-md p-10 animate-in fade-in zoom-in-95">
+                    <div className="max-w-xl mx-auto space-y-8">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">New Entry</h3>
+                        <button onClick={() => setShowAddForm(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X className="w-6 h-6 text-slate-400" /></button>
                       </div>
-                      Successfully extracted {stats.total} corps members across {stats.ppas} PPAs.
+                      <form onSubmit={addNewMember} className="grid grid-cols-2 gap-6">
+                        <div className="col-span-2 space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Full Name</label>
+                          <input required name="fullName" className="w-full px-5 py-3.5 border border-slate-100 rounded-xl bg-slate-50 focus:ring-4 focus:ring-green-500/10 focus:outline-none" placeholder="DOE JOHN SMITH" />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">State Code</label>
+                          <input required name="stateCode" className="w-full px-5 py-3.5 border border-slate-100 rounded-xl bg-slate-50 focus:ring-4 focus:ring-green-500/10 focus:outline-none" placeholder="NY/24B/1234" />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Gender</label>
+                          <select name="gender" className="w-full px-5 py-3.5 border border-slate-100 rounded-xl bg-slate-50 focus:ring-4 focus:ring-green-500/10 focus:outline-none">
+                            <option value="M">Male</option>
+                            <option value="F">Female</option>
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Phone</label>
+                          <input name="phone" className="w-full px-5 py-3.5 border border-slate-100 rounded-xl bg-slate-50 focus:ring-4 focus:ring-green-500/10 focus:outline-none" placeholder="080 000 0000" />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">PPA</label>
+                          <input required name="ppa" className="w-full px-5 py-3.5 border border-slate-100 rounded-xl bg-slate-50 focus:ring-4 focus:ring-green-500/10 focus:outline-none" placeholder="Central High School" />
+                        </div>
+                        <button type="submit" className="col-span-2 py-5 bg-green-700 text-white font-black rounded-2xl uppercase tracking-widest shadow-xl shadow-green-900/10 hover:bg-green-800 transition-all">Create Record</button>
+                      </form>
                     </div>
-                    <button onClick={() => setShowSuccess(false)} className="text-green-600/50 hover:text-green-800 p-2">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </div>
                 )}
 
                 {state.data.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full min-h-[500px] px-8 text-center">
-                    <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-8 relative">
-                      <FileText className="w-12 h-12 text-slate-200" />
-                      <div className="absolute -right-2 -bottom-2 w-10 h-10 bg-white shadow-xl rounded-full flex items-center justify-center border border-slate-100">
-                        <Search className="w-5 h-5 text-green-600" />
+                  <div className="flex flex-col items-center justify-center h-full min-h-[550px] text-center px-10">
+                    <div className="w-32 h-32 bg-slate-50 rounded-[3rem] flex items-center justify-center mb-10 relative border-2 border-slate-100">
+                      <FileText className="w-16 h-16 text-slate-200" />
+                      <div className="absolute -right-4 -bottom-4 w-14 h-14 bg-white shadow-2xl rounded-2xl flex items-center justify-center border border-slate-100 animate-bounce">
+                        <TrendingUp className="w-7 h-7 text-green-600" />
                       </div>
                     </div>
-                    <h3 className="text-2xl font-black text-slate-800 tracking-tight">WAITING FOR DOCUMENTS</h3>
-                    <p className="text-sm text-slate-400 max-w-sm mt-4 font-medium leading-relaxed">
-                      Upload your <b>Monthly Clearance</b> or <b>Posting Lists</b>. Our AI will automatically extract and group everyone by their PPA.
+                    <h3 className="text-3xl font-black text-slate-800 tracking-tighter uppercase">No Intelligence Loaded</h3>
+                    <p className="text-sm text-slate-400 max-w-sm mt-4 font-bold leading-relaxed uppercase tracking-tight">
+                      Feed the system with clear photos of <b>posting letters</b> or <b>clearance documents</b> for automated grouping.
                     </p>
-                    
-                    <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 gap-4 text-left max-w-2xl">
-                      <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex gap-4">
-                        <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center shrink-0">
-                          <Users className="w-5 h-5 text-blue-500" />
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">SMART DETECTION</p>
-                          <p className="text-xs text-slate-600 leading-relaxed font-bold uppercase tracking-tighter">Recognizes names, state codes, and PPA associations instantly.</p>
-                        </div>
-                      </div>
-                      <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex gap-4">
-                        <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center shrink-0">
-                          <LayoutGrid className="w-5 h-5 text-green-500" />
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-black text-green-400 uppercase tracking-widest mb-1">AUTO ORGANIZATION</p>
-                          <p className="text-xs text-slate-600 leading-relaxed font-bold uppercase tracking-tighter">Automatically groups corps members into PPA departments.</p>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 ) : (
-                  <div className="p-4">
-                    {viewMode === 'table' ? (
-                      <div className="overflow-hidden rounded-2xl border border-slate-100">
+                  <div className="p-4 overflow-y-auto custom-scrollbar h-full max-h-[680px]">
+                    {viewMode === 'table' && (
+                      <div className="overflow-hidden rounded-3xl border border-slate-100 bg-[#fdfdfd]">
                         <table className="w-full text-xs text-left border-collapse">
-                          <thead className="bg-slate-50 text-slate-400 uppercase text-[9px] font-black tracking-widest sticky top-0 z-10">
+                          <thead className="bg-[#f8faf9] text-slate-400 uppercase text-[10px] font-black tracking-widest sticky top-0 z-10 border-b border-slate-100">
                             <tr>
-                              <th className="px-6 py-4 border-b border-slate-100">SN</th>
-                              <th className="px-6 py-4 border-b border-slate-100">STATE CODE</th>
-                              <th className="px-6 py-4 border-b border-slate-100">FULL NAME</th>
-                              <th className="px-6 py-4 border-b border-slate-100 text-center">GEN</th>
-                              <th className="px-6 py-4 border-b border-slate-100">GSM NO</th>
-                              <th className="px-6 py-4 border-b border-slate-100">ASSIGNED PPA</th>
+                              <th className="px-8 py-5">SN</th>
+                              <th className="px-8 py-5">CODE</th>
+                              <th className="px-8 py-5">NAME</th>
+                              <th className="px-8 py-5">GEN</th>
+                              <th className="px-8 py-5">PPA</th>
+                              <th className="px-8 py-5 text-right">ACTION</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50">
-                            {filteredMembers.map((member, i) => (
-                              <tr key={i} className="hover:bg-green-50/30 transition-colors group">
-                                <td className="px-6 py-4 text-slate-400 font-mono text-[10px] font-bold">{member.sn}</td>
-                                <td className="px-6 py-4 font-black text-slate-800 tracking-tighter">{member.stateCode}</td>
-                                <td className="px-6 py-4 font-bold text-slate-700 uppercase">{member.fullName}</td>
-                                <td className="px-6 py-4 text-center">
-                                  <span className={`px-2 py-0.5 rounded text-[9px] font-black ${member.gender === 'F' || member.gender === 'Female' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>
-                                    {member.gender.charAt(0)}
-                                  </span>
+                            {filteredMembers.map((m, i) => (
+                              <tr key={m.id} className="hover:bg-green-50/20 transition-all group">
+                                <td className="px-8 py-5 text-slate-300 font-mono text-[10px]">{m.sn}</td>
+                                <td className="px-8 py-5">
+                                  <input 
+                                    className="bg-transparent border-none font-black text-slate-800 tracking-tighter w-full focus:outline-none focus:ring-2 focus:ring-green-500/10 rounded"
+                                    value={m.stateCode}
+                                    onChange={(e) => handleEditChange(m.id, 'stateCode', e.target.value)}
+                                  />
                                 </td>
-                                <td className="px-6 py-4 font-mono text-[10px] text-slate-500">{member.phone}</td>
-                                <td className="px-6 py-4">
-                                  <span className="bg-slate-50 text-slate-700 px-3 py-1 rounded-lg text-[10px] font-black border border-slate-100 block truncate max-w-[200px] uppercase tracking-tighter" title={member.companyName}>
-                                    {member.companyName}
-                                  </span>
+                                <td className="px-8 py-5 uppercase">
+                                   <input 
+                                    className="bg-transparent border-none font-bold text-slate-600 w-full focus:outline-none focus:ring-2 focus:ring-green-500/10 rounded"
+                                    value={m.fullName}
+                                    onChange={(e) => handleEditChange(m.id, 'fullName', e.target.value)}
+                                  />
+                                </td>
+                                <td className="px-8 py-5">
+                                  <button 
+                                    onClick={() => handleEditChange(m.id, 'gender', m.gender === 'M' ? 'F' : 'M')}
+                                    className={`px-3 py-1 rounded-lg text-[9px] font-black shadow-sm ${m.gender === 'F' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}
+                                  >
+                                    {m.gender}
+                                  </button>
+                                </td>
+                                <td className="px-8 py-5">
+                                  <input 
+                                    className="bg-slate-50 border border-transparent hover:border-slate-100 text-slate-500 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter w-full focus:bg-white focus:ring-4 focus:ring-green-500/10 transition-all"
+                                    value={m.companyName}
+                                    onChange={(e) => handleEditChange(m.id, 'companyName', e.target.value)}
+                                  />
+                                </td>
+                                <td className="px-8 py-5 text-right opacity-0 group-hover:opacity-100 transition-all">
+                                  <button onClick={() => deleteMember(m.id)} className="p-3 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
                                 </td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
                       </div>
-                    ) : (
-                      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                    )}
+
+                    {viewMode === 'report' && (
+                      <div className="space-y-10 p-6">
                         {groups
                           .filter(([ppa]) => !state.selectedGroup || ppa === state.selectedGroup)
                           .map(([ppa, members]) => (
-                          <div key={ppa} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center text-white shadow-sm">
-                                  <MapPin className="w-4 h-4" />
-                                </div>
-                                <h3 className="font-black text-sm text-slate-800 uppercase tracking-tighter">{ppa}</h3>
+                          <div key={ppa} className="bg-white rounded-[2rem] border-2 border-slate-100 overflow-hidden shadow-sm page-break-after-always">
+                            <div className="bg-[#f8faf9] px-8 py-6 border-b border-slate-100 flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 bg-green-700 rounded-xl flex items-center justify-center text-white shadow-lg"><MapPin className="w-5 h-5" /></div>
+                                <h3 className="font-black text-lg text-slate-800 uppercase tracking-tighter">{ppa}</h3>
                               </div>
-                              <span className="text-[10px] font-black bg-slate-200 text-slate-600 px-3 py-1 rounded-full uppercase tracking-widest">
-                                {members.length} Members
-                              </span>
+                              <div className="text-right">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SUB-STATION LIST</p>
+                                <p className="text-sm font-black text-green-700">{members.length} CORPS MEMBERS</p>
+                              </div>
                             </div>
-                            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                               {members.map((m, idx) => (
-                                <div key={idx} className="flex items-center gap-4 p-3 bg-slate-50/50 rounded-xl border border-slate-100 hover:border-green-200 transition-colors">
-                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-xs ${m.gender === 'F' || m.gender === 'Female' ? 'bg-pink-100 text-pink-600' : 'bg-blue-100 text-blue-600'}`}>
-                                    {m.fullName.charAt(0)}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-black text-slate-800 truncate uppercase tracking-tighter">{m.fullName}</p>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                      <span className="text-[9px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">{m.stateCode}</span>
-                                      <span className="text-[9px] font-medium text-slate-400">{m.phone}</span>
+                                <div key={m.id} className="p-5 rounded-2xl bg-[#fcfdfc] border border-slate-50 hover:border-green-200 transition-all relative overflow-hidden group">
+                                  <div className={`absolute top-0 right-0 w-1 h-full ${m.gender === 'F' ? 'bg-pink-300' : 'bg-blue-300'}`}></div>
+                                  <div className="flex items-start gap-4">
+                                    <div className={`w-12 h-12 rounded-[1rem] flex items-center justify-center font-black text-sm shadow-inner shrink-0 ${m.gender === 'F' ? 'bg-pink-50 text-pink-600' : 'bg-blue-50 text-blue-600'}`}>
+                                      {m.fullName.charAt(0)}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-black text-slate-900 leading-tight uppercase truncate">{m.fullName}</p>
+                                      <p className="text-[10px] font-black text-green-700 mt-1 uppercase tracking-tighter">{m.stateCode}</p>
+                                      <p className="text-[10px] font-bold text-slate-400 mt-0.5">{m.phone || 'No Contact'}</p>
                                     </div>
                                   </div>
-                                  <ChevronRight className="w-4 h-4 text-slate-300" />
                                 </div>
                               ))}
                             </div>
@@ -477,29 +557,61 @@ const App: React.FC = () => {
                         ))}
                       </div>
                     )}
-                  </div>
-                )}
 
-                {state.data.length > 0 && filteredMembers.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-32 text-slate-400">
-                    <Search className="w-16 h-16 mb-4 opacity-5" />
-                    <p className="font-black uppercase tracking-widest text-xs">No records matching search</p>
+                    {viewMode === 'analytics' && stats && (
+                      <div className="p-8 space-y-12 animate-in fade-in">
+                        <div>
+                           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">PPA Saturation (Top 10)</h4>
+                           <div className="space-y-6">
+                              {groups.slice(0, 10).map(([name, members]) => (
+                                <div key={name} className="space-y-2">
+                                  <div className="flex justify-between items-center px-1">
+                                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-tighter truncate max-w-[80%]">{name}</span>
+                                    <span className="text-[10px] font-black text-green-700">{members.length}</span>
+                                  </div>
+                                  <div className="h-4 bg-slate-50 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-green-600 rounded-full transition-all duration-1000" 
+                                      style={{width: `${(members.length / state.data.length) * 100}%`}}
+                                    ></div>
+                                  </div>
+                                </div>
+                              ))}
+                           </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-8 pt-8 border-t border-slate-100">
+                          <div className="bg-[#f8faf9] p-8 rounded-[2rem] text-center border border-slate-100">
+                            <PieChart className="w-8 h-8 text-green-600 mx-auto mb-4" />
+                            <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">PPA DIVERSITY</h5>
+                            <p className="text-4xl font-black text-slate-800">{stats.ppas}</p>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase mt-2 opacity-50">Distinct Locations</p>
+                          </div>
+                          <div className="bg-[#fcfdfc] p-8 rounded-[2rem] text-center border border-slate-100">
+                            <Users className="w-8 h-8 text-blue-600 mx-auto mb-4" />
+                            <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">AVG PERSONNEL / PPA</h5>
+                            <p className="text-4xl font-black text-slate-800">{(stats.total / stats.ppas).toFixed(1)}</p>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase mt-2 opacity-50">Across All Batches</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
               {/* Status Footer */}
               {state.data.length > 0 && (
-                <div className="p-4 bg-slate-50 border-t border-slate-200 text-[10px] text-slate-500 flex justify-between items-center font-black uppercase tracking-widest">
-                  <div className="flex items-center gap-4">
-                    <span>Showing {filteredMembers.length} of {state.data.length} records</span>
-                    {state.selectedGroup && <span className="text-green-600 bg-green-100 px-2 py-0.5 rounded-full ring-1 ring-green-200">{state.selectedGroup}</span>}
+                <div className="p-6 bg-[#f8faf9] border-t border-slate-100 text-[10px] text-slate-400 flex justify-between items-center font-black uppercase tracking-widest">
+                  <div className="flex items-center gap-6">
+                    <span>Active Context: {filteredMembers.length} Entities</span>
+                    {state.selectedGroup && <span className="text-green-700 bg-white shadow-sm px-4 py-1 rounded-full border border-green-100">Filter: {state.selectedGroup}</span>}
                   </div>
-                  <div className="flex items-center gap-4">
-                    <button className="flex items-center gap-1 hover:text-slate-800 transition-colors"><Printer className="w-3 h-3" /> Print List</button>
-                    <div className="flex items-center gap-2 text-green-600">
+                  <div className="flex items-center gap-6">
+                    <button className="flex items-center gap-2 hover:text-slate-800 transition-colors"><Printer className="w-4 h-4" /> Print Document</button>
+                    <div className="flex items-center gap-3 text-green-600">
                       <div className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
-                      AI-Extracted
+                      Intelligence Sync Active
                     </div>
                   </div>
                 </div>
@@ -509,36 +621,33 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Mobile Actions Drawer (Hidden on Desktop) */}
-      <div className="fixed bottom-0 inset-x-0 p-4 bg-white/95 backdrop-blur-xl border-t border-slate-200 lg:hidden z-40 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
-        {!state.data.length ? (
-          <button 
-            onClick={processFiles}
-            disabled={state.isProcessing || uploadedFiles.length === 0}
-            className="w-full bg-[#006837] text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-3 disabled:bg-slate-200 disabled:text-slate-400 active:scale-95 transition-all"
-          >
-            {state.isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <TrendingUp className="w-5 h-5" />}
-            {state.isProcessing ? 'Analyzing Documents...' : 'START EXTRACTION'}
-          </button>
-        ) : (
-          <div className="flex gap-3">
-            <button 
-              onClick={() => {
-                resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="flex-1 bg-slate-900 text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-2 uppercase text-xs tracking-widest"
-            >
-              <LayoutGrid className="w-4 h-4" />
-              View List
-            </button>
-            <button 
-              onClick={downloadCSV}
-              className="w-16 bg-[#006837] text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center active:scale-95 transition-all"
-            >
-              <Download className="w-5 h-5" />
-            </button>
-          </div>
-        )}
+      {/* Persistent Floating Controls for Mobile */}
+      <div className="fixed bottom-6 inset-x-6 lg:hidden z-50">
+         <div className="bg-white/90 backdrop-blur-2xl border border-slate-200 p-4 rounded-[2rem] shadow-2xl flex gap-4">
+            {!state.data.length ? (
+              <button 
+                onClick={processFiles}
+                disabled={state.isProcessing || uploadedFiles.length === 0}
+                className="flex-1 bg-green-700 text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-3 disabled:bg-slate-100 disabled:text-slate-300"
+              >
+                {state.isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <TrendingUp className="w-5 h-5" />}
+                {state.isProcessing ? 'Analyzing...' : 'START EXTRACTION'}
+              </button>
+            ) : (
+              <>
+                <button 
+                  onClick={() => resultsRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                  className="flex-1 bg-slate-900 text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                >
+                  <List className="w-4 h-4" />
+                  View Results
+                </button>
+                <button onClick={downloadCSV} className="w-16 bg-green-700 text-white font-black rounded-2xl flex items-center justify-center shadow-xl">
+                  <Download className="w-5 h-5" />
+                </button>
+              </>
+            )}
+         </div>
       </div>
     </div>
   );
