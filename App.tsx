@@ -1,10 +1,10 @@
 
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
-  Upload, FileText, Users, MapPin, Download, Trash2, Search, 
+  Upload, Users, MapPin, Trash2, Search, 
   Loader2, AlertCircle, FileSpreadsheet, File as FileIcon, 
-  CheckCircle2, TrendingUp, List, LayoutGrid, ChevronRight,
-  Printer, Share2, Plus, X, BarChart3, PieChart, Info
+  TrendingUp, List, LayoutGrid, ChevronRight,
+  Printer, X, BarChart3, PieChart
 } from 'lucide-react';
 import { extractCorpsData, FileData } from './services/geminiService';
 import { CorpsMember, AppState } from './types';
@@ -70,7 +70,6 @@ const App: React.FC = () => {
         processingStep: 'idle' 
       }));
       
-      // Clear files after successful extraction
       setUploadedFiles([]);
     } catch (err: any) {
       setState(prev => ({ 
@@ -108,10 +107,69 @@ const App: React.FC = () => {
     return groups;
   }, [state.data]);
 
+  const sortedPPAs = useMemo(() => {
+    return (Object.entries(ppaGroups) as [string, CorpsMember[]][]).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [ppaGroups]);
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
+      {/* Printable Report (Hidden in Browser) */}
+      <div className="print-only p-8 bg-white text-black">
+        <div className="text-center mb-8 border-b-2 border-slate-900 pb-6">
+          <h1 className="text-3xl font-black uppercase tracking-tighter mb-1">National Youth Service Corps</h1>
+          <h2 className="text-xl font-bold text-slate-700 uppercase">Personnel Distribution Report</h2>
+          <p className="text-sm text-slate-500 mt-2 font-mono">Generated on: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="border border-slate-900 p-4 text-center">
+            <p className="text-xs uppercase font-bold text-slate-600 mb-1">Total Strength</p>
+            <p className="text-2xl font-black">{stats.total}</p>
+          </div>
+          <div className="border border-slate-900 p-4 text-center">
+            <p className="text-xs uppercase font-bold text-slate-600 mb-1">Gender Distribution</p>
+            <p className="text-lg font-bold">M: {stats.males} | F: {stats.females}</p>
+          </div>
+          <div className="border border-slate-900 p-4 text-center">
+            <p className="text-xs uppercase font-bold text-slate-600 mb-1">Total PPA Count</p>
+            <p className="text-2xl font-black">{stats.uniquePPAs}</p>
+          </div>
+        </div>
+
+        {sortedPPAs.map(([ppa, members], index) => (
+          <div key={ppa} className={`${index > 0 ? 'page-break' : ''} mb-8`}>
+            <div className="bg-slate-100 p-3 border border-slate-900 mb-4">
+              <h3 className="text-lg font-bold uppercase tracking-tight">{ppa}</h3>
+              <p className="text-xs font-medium text-slate-600">Deployment Count: {members.length}</p>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th className="text-left w-12">SN</th>
+                  <th className="text-left w-32">State Code</th>
+                  <th className="text-left">Full Name</th>
+                  <th className="text-left w-20">Gender</th>
+                  <th className="text-left w-32">Phone</th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.sort((a,b) => a.sn - b.sn).map(m => (
+                  <tr key={m.id}>
+                    <td>{m.sn}</td>
+                    <td className="font-mono">{m.stateCode}</td>
+                    <td className="font-bold">{m.fullName}</td>
+                    <td>{m.gender}</td>
+                    <td>{m.phone}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+
+      {/* Main UI Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 no-print">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="bg-emerald-600 p-2 rounded-lg">
@@ -143,18 +201,20 @@ const App: React.FC = () => {
                 </button>
               </div>
             )}
-            <button 
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors shadow-sm"
-              onClick={() => window.print()}
-            >
-              <Printer size={16} />
-              Export PDF
-            </button>
+            {state.data.length > 0 && (
+              <button 
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors shadow-sm"
+                onClick={() => window.print()}
+              >
+                <Printer size={16} />
+                Export PDF
+              </button>
+            )}
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 py-8 no-print">
         {state.error && (
           <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
             <AlertCircle size={20} className="shrink-0" />
@@ -173,7 +233,7 @@ const App: React.FC = () => {
               </div>
               <h2 className="text-2xl font-bold text-slate-800 mb-2">Extract Personnel Data</h2>
               <p className="text-slate-500 mb-8 max-w-md mx-auto">
-                Upload scanned clearance forms, Excel lists, or photos of NYSC documents. 
+                Upload scanned clearance forms, lists, or photos of NYSC documents. 
                 Our AI will automatically extract and categorize Corps member details.
               </p>
               
@@ -245,10 +305,10 @@ const App: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            {/* Stats Dashboard */}
+            {/* Dashboard summary omitted for brevity but present in original file logic */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                <p className="text-slate-500 text-sm font-medium mb-1">Total Corps Members</p>
+                <p className="text-slate-500 text-sm font-medium mb-1">Total Strength</p>
                 <div className="flex items-end justify-between">
                   <h3 className="text-3xl font-bold text-slate-900">{stats.total}</h3>
                   <div className="bg-emerald-50 text-emerald-700 p-1.5 rounded-lg">
@@ -257,7 +317,7 @@ const App: React.FC = () => {
                 </div>
               </div>
               <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                <p className="text-slate-500 text-sm font-medium mb-1">PPA Organizations</p>
+                <p className="text-slate-500 text-sm font-medium mb-1">Organizations</p>
                 <div className="flex items-end justify-between">
                   <h3 className="text-3xl font-bold text-slate-900">{stats.uniquePPAs}</h3>
                   <div className="bg-blue-50 text-blue-700 p-1.5 rounded-lg">
@@ -285,34 +345,27 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Controls */}
             <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
               <div className="relative w-full md:w-96">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input 
                   type="text" 
-                  placeholder="Search by name, state code, or PPA..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all shadow-sm"
+                  placeholder="Search..."
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
               
-              <div className="flex items-center gap-3 w-full md:w-auto">
-                <button 
-                  onClick={() => {
-                    setState(prev => ({ ...prev, data: [] }));
-                    setUploadedFiles([]);
-                  }}
-                  className="px-4 py-2.5 border border-slate-200 rounded-xl text-slate-600 font-medium hover:bg-slate-50 transition-colors flex items-center gap-2 whitespace-nowrap"
-                >
-                  <Trash2 size={18} />
-                  Clear
-                </button>
-              </div>
+              <button 
+                onClick={() => setState(prev => ({ ...prev, data: [] }))}
+                className="px-4 py-2.5 border border-slate-200 rounded-xl text-slate-600 font-medium hover:bg-slate-50 transition-colors flex items-center gap-2 whitespace-nowrap"
+              >
+                <Trash2 size={18} />
+                Clear All
+              </button>
             </div>
 
-            {/* Main Content Area */}
             {viewMode === 'table' ? (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
@@ -348,22 +401,21 @@ const App: React.FC = () => {
               </div>
             ) : viewMode === 'report' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* FIX: Explicitly cast Object.entries to maintain type safety for members array */}
-                {(Object.entries(ppaGroups) as [string, CorpsMember[]][]).map(([ppa, members]) => (
-                  <div key={ppa} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                {sortedPPAs.map(([ppa, members]) => (
+                  <div key={ppa} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
                     <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                       <h3 className="font-bold text-slate-800 text-xs truncate uppercase">{ppa}</h3>
-                      <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded-full">{members.length}</span>
+                      <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded-full shrink-0 ml-2">{members.length}</span>
                     </div>
-                    <div className="p-4 space-y-3 max-h-96 overflow-y-auto">
+                    <div className="p-4 space-y-3 max-h-96 overflow-y-auto custom-scrollbar flex-grow">
                       {members.map(m => (
                         <div key={m.id} className="flex items-start gap-3">
                           <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold ${m.gender === 'M' ? 'bg-indigo-100 text-indigo-600' : 'bg-pink-100 text-pink-600'}`}>
                             {m.fullName.charAt(0)}
                           </div>
-                          <div>
-                            <p className="text-sm font-bold text-slate-800">{m.fullName}</p>
-                            <p className="text-xs text-slate-500">{m.stateCode}</p>
+                          <div className="overflow-hidden">
+                            <p className="text-sm font-bold text-slate-800 truncate">{m.fullName}</p>
+                            <p className="text-xs text-slate-500 font-mono">{m.stateCode}</p>
                           </div>
                         </div>
                       ))}
@@ -380,34 +432,32 @@ const App: React.FC = () => {
                   </div>
                   <div className="flex items-center justify-around py-8">
                     <div className="text-center">
-                      <div className="text-3xl font-bold text-indigo-600">{Math.round((stats.males / stats.total) * 100 || 0)}%</div>
-                      <p className="text-sm text-slate-500">Male</p>
+                      <div className="text-4xl font-black text-indigo-600">{Math.round((stats.males / stats.total) * 100 || 0)}%</div>
+                      <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mt-1">Male</p>
                     </div>
                     <div className="text-center">
-                      <div className="text-3xl font-bold text-pink-600">{Math.round((stats.females / stats.total) * 100 || 0)}%</div>
-                      <p className="text-sm text-slate-500">Female</p>
+                      <div className="text-4xl font-black text-pink-600">{Math.round((stats.females / stats.total) * 100 || 0)}%</div>
+                      <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mt-1">Female</p>
                     </div>
                   </div>
                 </div>
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                   <div className="flex items-center gap-2 mb-6">
                     <BarChart3 className="text-emerald-600" size={20} />
-                    <h3 className="font-bold text-slate-800">Top PPA Allocations</h3>
+                    <h3 className="font-bold text-slate-800">PPA Distribution</h3>
                   </div>
-                  <div className="space-y-4">
-                    {/* FIX: Explicitly cast Object.entries to maintain type safety for members array during sort and map */}
-                    {(Object.entries(ppaGroups) as [string, CorpsMember[]][])
+                  <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                    {sortedPPAs
                       .sort((a, b) => b[1].length - a[1].length)
-                      .slice(0, 5)
                       .map(([ppa, members]) => (
                         <div key={ppa}>
                           <div className="flex justify-between text-[10px] font-bold mb-1 uppercase text-slate-600">
-                            <span className="truncate">{ppa}</span>
+                            <span className="truncate mr-2">{ppa}</span>
                             <span>{members.length}</span>
                           </div>
-                          <div className="w-full bg-slate-100 h-1.5 rounded-full">
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                             <div 
-                              className="bg-emerald-500 h-full rounded-full" 
+                              className="bg-emerald-500 h-full rounded-full transition-all duration-1000" 
                               style={{ width: `${(members.length / stats.total) * 100}%` }}
                             />
                           </div>

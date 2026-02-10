@@ -27,11 +27,58 @@
         border-radius: 50%;
         animation: spin 1s linear infinite;
       }
+      
+      /* Print Styles */
       @media print {
-        .page-break-after-always { page-break-after: always; }
-        header, .lg\:col-span-4, .sticky, button, .md\:flex-row, .no-print { display: none !important; }
-        main { margin: 0 !important; padding: 0 !important; }
-        .lg\:col-span-8 { width: 100% !important; }
+        @page {
+          margin: 1.5cm;
+          size: A4;
+        }
+        
+        body {
+          background-color: white !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        /* Hide everything by default in print */
+        header, .no-print, button, input, .lg\:col-span-4, .sticky, nav {
+          display: none !important;
+        }
+
+        /* Ensure the print container is visible */
+        .print-only {
+          display: block !important;
+        }
+
+        .page-break {
+          page-break-before: always;
+          padding-top: 1cm;
+        }
+
+        table {
+          width: 100% !important;
+          border-collapse: collapse !important;
+        }
+
+        th, td {
+          border: 1px solid #e2e8f0 !important;
+          padding: 8px !important;
+          font-size: 10pt !important;
+        }
+
+        th {
+          background-color: #f8fafc !important;
+        }
+
+        .no-break {
+          page-break-inside: avoid;
+        }
+      }
+
+      /* Hide print container during normal use */
+      .print-only {
+        display: none;
       }
     </style>
   <script type="importmap">
