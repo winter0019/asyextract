@@ -348,7 +348,8 @@ const App: React.FC = () => {
               </div>
             ) : viewMode === 'report' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {Object.entries(ppaGroups).map(([ppa, members]) => (
+                {/* FIX: Explicitly cast Object.entries to maintain type safety for members array */}
+                {(Object.entries(ppaGroups) as [string, CorpsMember[]][]).map(([ppa, members]) => (
                   <div key={ppa} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                       <h3 className="font-bold text-slate-800 text-xs truncate uppercase">{ppa}</h3>
@@ -394,7 +395,8 @@ const App: React.FC = () => {
                     <h3 className="font-bold text-slate-800">Top PPA Allocations</h3>
                   </div>
                   <div className="space-y-4">
-                    {Object.entries(ppaGroups)
+                    {/* FIX: Explicitly cast Object.entries to maintain type safety for members array during sort and map */}
+                    {(Object.entries(ppaGroups) as [string, CorpsMember[]][])
                       .sort((a, b) => b[1].length - a[1].length)
                       .slice(0, 5)
                       .map(([ppa, members]) => (
