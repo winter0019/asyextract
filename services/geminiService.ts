@@ -9,7 +9,7 @@ export interface FileData {
 
 export const extractCorpsData = async (files: FileData[]): Promise<ExtractionResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const model = 'gemini-3-pro-preview';
+  const model = 'gemini-3-flash-preview';
 
   const parts = files.map(file => {
     if (file.mimeType === 'text/csv' || file.mimeType === 'text/plain') {
@@ -27,19 +27,22 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
     TASK: Extract list-based data from the provided documents.
     
     CONTEXT: 
-    - These are likely official clearance lists, payrolls, or posting documents.
-    - Common columns: S/N (Serial), ID/Code (e.g., NY/24B/1234), Full Name, Gender, Contact/Phone, and Organization/PPA.
+    - These are official personnel lists or clearance documents.
+    - Columns typically include: Serial Number (SN), State Code (e.g., NY/24B/1234), Full Name, Gender, Phone, and PPA (Organization).
+    
+    CRITICAL INSTRUCTION FOR GROUPING:
+    - Lists are often grouped by PPA (Place of Primary Assignment). 
+    - The PPA name might appear once as a header or title ABOVE a table of names.
+    - You MUST assign that header name to every "companyName" field for all individuals listed under it until a new header is found.
     
     EXTRACTION REQUIREMENTS:
-    1. Identify tables and rows across all provided files.
-    2. Normalize Name to UPPERCASE.
-    3. Normalize Gender to exactly "M" or "F".
-    4. Normalize Phone to a standard format if possible.
-    5. Generate a unique "id" (string) for every record extracted.
-    6. If a field like "Company" or "PPA" isn't explicitly on every row, infer it from headers or preceding group labels.
-    7. Ensure you extract EVERY person listed. Do not skip anyone.
+    1. Normalize Name to UPPERCASE.
+    2. Normalize Gender to exactly "M" or "F".
+    3. If PPA is not found, use "Unassigned".
+    4. Generate a unique "id" string for every record.
+    5. Extract EVERY person listed. Do not skip anyone.
     
-    Return the data in the requested JSON structure.
+    Return the data in a JSON object with a "members" array.
   `;
 
   try {
@@ -47,7 +50,6 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
       model,
       contents: { parts: [...parts, { text: prompt }] },
       config: {
-        thinkingConfig: { thinkingBudget: 6000 },
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -78,10 +80,13 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
     if (!text) throw new Error("AI returned empty content");
     
     const parsed = JSON.parse(text) as ExtractionResponse;
-    // Basic cleanup and sorting
+    
+    // Final cleanup to ensure consistency
     parsed.members = parsed.members.map(m => ({
       ...m,
-      gender: m.gender.toUpperCase().startsWith('M') ? 'M' : 'F'
+      gender: (m.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M',
+      fullName: (m.fullName || '').toUpperCase(),
+      companyName: (m.companyName || 'Unassigned').toUpperCase()
     })).sort((a, b) => (a.sn || 0) - (b.sn || 0));
     
     return parsed;
