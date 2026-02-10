@@ -2,6 +2,9 @@
   "name": "asyextract",
   "version": "1.0.0",
   "main": "index.tsx",
+  "scripts": {
+    "build": "echo 'No build step required'"
+  },
   "dependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
