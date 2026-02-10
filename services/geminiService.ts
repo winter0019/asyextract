@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { ExtractionResponse } from "../types";
 
@@ -9,7 +8,8 @@ export interface FileData {
 }
 
 export const extractCorpsData = async (files: FileData[]): Promise<ExtractionResponse> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  // Always use this pattern for API key initialization
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const model = 'gemini-3-flash-preview';
 
   const parts = files.map(file => {
@@ -26,9 +26,12 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
 
   const prompt = `
     TASK: Extract list-based data from the provided documents.
-    CONTEXT: personnel lists or clearance documents.
-    Columns: Serial Number (SN), State Code, Full Name, Gender, Phone, and PPA.
-    Note: PPA name might appear once as a header above a table. Assign it to everyone in that group.
+    CONTEXT: personnel lists or clearance documents for NYSC.
+    Columns to identify: Serial Number (SN), State Code, Full Name, Gender, Phone, and PPA (Organization).
+    
+    CRITICAL: 
+    PPA name might appear once as a header above a table of names. 
+    Assign that header to every person listed under it until a new header is found.
     Return JSON with a "members" array.
   `;
 
@@ -67,11 +70,13 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
     if (!text) throw new Error("AI returned empty content");
     
     const parsed = JSON.parse(text) as ExtractionResponse;
+    
+    // Normalize and sanitize
     parsed.members = parsed.members.map(m => ({
       ...m,
       gender: (m.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M',
       fullName: (m.fullName || '').toUpperCase(),
-      companyName: (m.companyName || 'Unassigned').toUpperCase()
+      companyName: (m.companyName || 'UNASSIGNED').toUpperCase()
     })).sort((a, b) => (a.sn || 0) - (b.sn || 0));
     
     return parsed;

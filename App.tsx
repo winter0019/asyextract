@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { 
   Upload, FileText, Users, MapPin, Download, Trash2, Search, 
@@ -5,8 +6,8 @@ import {
   CheckCircle2, TrendingUp, List, LayoutGrid, ChevronRight,
   Printer, Share2, Plus, X, BarChart3, PieChart, Info
 } from 'lucide-react';
-import { extractCorpsData, FileData } from './services/geminiService.ts';
-import { CorpsMember, AppState } from './types.ts';
+import { extractCorpsData, FileData } from './services/geminiService';
+import { CorpsMember, AppState } from './types';
 
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>({
@@ -20,27 +21,23 @@ const App: React.FC = () => {
   const [uploadedFiles, setUploadedFiles] = useState<FileData[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'table' | 'report' | 'analytics'>('table');
-  const [showAddForm, setShowAddForm] = useState(false);
   
-  const resultsRef = useRef<HTMLDivElement>(null);
-
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []) as File[];
+    
     files.forEach(file => {
       const reader = new FileReader();
       reader.onload = (event) => {
-        let content = event.target?.result as string;
-        
+        const content = event.target?.result as string;
         const fileData: FileData = {
           name: file.name,
-          mimeType: file.type || (file.name.endsWith('.csv') ? 'text/csv' : 'application/octet-stream'),
+          mimeType: file.type || 'application/octet-stream',
           data: content
         };
-        
         setUploadedFiles(prev => [...prev, fileData]);
       };
 
-      if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
+      if (file.type.startsWith('text/') || file.type === 'application/json' || file.name.endsWith('.csv')) {
         reader.readAsText(file);
       } else {
         reader.readAsDataURL(file);
@@ -48,501 +45,381 @@ const App: React.FC = () => {
     });
   };
 
-  const processFiles = async () => {
+  const removeFile = (index: number) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const processData = async () => {
     if (uploadedFiles.length === 0) return;
 
-    setState(prev => ({ ...prev, isProcessing: true, processingStep: 'scanning', error: null }));
-    
+    setState(prev => ({ 
+      ...prev, 
+      isProcessing: true, 
+      processingStep: 'scanning',
+      error: null 
+    }));
+
     try {
-      setState(s => ({ ...s, processingStep: 'extracting' }));
+      setState(prev => ({ ...prev, processingStep: 'extracting' }));
       const result = await extractCorpsData(uploadedFiles);
       
-      setState(s => ({ ...s, processingStep: 'validating' }));
       setState(prev => ({ 
         ...prev, 
         data: result.members, 
-        isProcessing: false,
-        processingStep: 'idle',
-        selectedGroup: null 
+        isProcessing: false, 
+        processingStep: 'idle' 
       }));
       
-      setTimeout(() => {
-        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 300);
+      // Clear files after successful extraction
+      setUploadedFiles([]);
     } catch (err: any) {
-      console.error("Extraction error:", err);
       setState(prev => ({ 
         ...prev, 
-        error: "Failed to process files. Please ensure they are legible lists.", 
-        isProcessing: false,
-        processingStep: 'idle'
+        isProcessing: false, 
+        processingStep: 'idle',
+        error: err.message || "Failed to process documents. Please check your internet connection or try again."
       }));
     }
   };
 
-  const deleteMember = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      data: prev.data.filter(m => m.id !== id)
-    }));
-  };
-
-  const addNewMember = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const newMember: CorpsMember = {
-      id: Math.random().toString(36).substr(2, 9),
-      sn: state.data.length + 1,
-      stateCode: (formData.get('stateCode') as string || '').toUpperCase(),
-      fullName: (formData.get('fullName') as string || '').toUpperCase(),
-      gender: formData.get('gender') as string || 'M',
-      phone: formData.get('phone') as string || '',
-      companyName: (formData.get('ppa') as string || 'Unassigned').toUpperCase(),
-    };
-    setState(prev => ({ ...prev, data: [...prev.data, newMember] }));
-    setShowAddForm(false);
-  };
-
-  const groups = useMemo(() => {
-    const map = new Map<string, CorpsMember[]>();
-    state.data.forEach(member => {
-      const ppa = member.companyName || 'UNASSIGNED';
-      if (!map.has(ppa)) map.set(ppa, []);
-      map.get(ppa)?.push(member);
-    });
-    return Array.from(map.entries()).sort((a, b) => b[1].length - a[1].length);
-  }, [state.data]);
+  const filteredData = useMemo(() => {
+    return state.data.filter(member => 
+      member.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      member.stateCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      member.companyName.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [state.data, searchTerm]);
 
   const stats = useMemo(() => {
-    if (!state.data || state.data.length === 0) return null;
-    const males = state.data.filter(m => m.gender === 'M').length;
+    const total = state.data.length;
     const females = state.data.filter(m => m.gender === 'F').length;
-    const totalCount = state.data.length;
-    return {
-      total: totalCount,
-      ppas: groups.length,
-      males,
-      females,
-      malePercent: Math.round((males / totalCount) * 100) || 0,
-      femalePercent: Math.round((females / totalCount) * 100) || 0,
-    };
-  }, [state.data, groups]);
-
-  const filteredMembers = useMemo(() => {
-    const baseList = state.selectedGroup 
-      ? groups.find(([ppa]) => ppa === state.selectedGroup)?.[1] || []
-      : state.data;
+    const males = total - females;
+    const uniquePPAs = new Set(state.data.map(m => m.companyName)).size;
     
-    return baseList.filter(m => 
-      (m.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (m.stateCode || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (m.companyName || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [state.selectedGroup, groups, state.data, searchTerm]);
+    return { total, females, males, uniquePPAs };
+  }, [state.data]);
 
-  const downloadCSV = useCallback(() => {
-    if (filteredMembers.length === 0) return;
-    const headers = ["SN", "State Code", "Full Name", "Gender", "Phone", "PPA"];
-    const rows = filteredMembers.map(m => [
-      m.sn,
-      `"${m.stateCode}"`,
-      `"${m.fullName}"`,
-      m.gender,
-      `"${m.phone}"`,
-      `"${m.companyName}"`
-    ]);
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `corps_list_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-  }, [filteredMembers]);
+  const ppaGroups = useMemo(() => {
+    const groups: Record<string, CorpsMember[]> = {};
+    state.data.forEach(m => {
+      if (!groups[m.companyName]) groups[m.companyName] = [];
+      groups[m.companyName].push(m);
+    });
+    return groups;
+  }, [state.data]);
 
   return (
-    <div className="min-h-screen bg-[#f0f4f2] font-sans text-slate-900 pb-20">
-      <header className="sticky top-0 z-50 bg-[#006837] text-white border-b-4 border-[#FFD700] shadow-xl">
-        <div className="container mx-auto px-4 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-[#FFD700] rounded-xl flex items-center justify-center text-green-900 font-black shadow-lg">NY</div>
-            <div>
-              <h1 className="text-xl font-black tracking-tighter leading-none uppercase">NYSC EXTRACTOR</h1>
-              <p className="text-[10px] text-green-100 font-bold tracking-widest uppercase mt-1 opacity-80">Data Structuring Suite</p>
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-emerald-600 p-2 rounded-lg">
+              <Users className="text-white h-5 w-5" />
             </div>
+            <h1 className="font-bold text-xl tracking-tight text-slate-800">CorpsScan <span className="text-emerald-600">Pro</span></h1>
           </div>
-          <div className="hidden md:block">
-            <div className="flex items-center gap-6">
-              <div className="px-4 py-2 bg-green-900/40 rounded-xl border border-green-700/50 flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                <span className="text-[10px] font-black uppercase tracking-widest">System Secure</span>
+          
+          <div className="flex items-center gap-4">
+            {state.data.length > 0 && (
+              <div className="flex bg-slate-100 p-1 rounded-lg">
+                <button 
+                  onClick={() => setViewMode('table')}
+                  className={`p-1.5 rounded-md transition-all ${viewMode === 'table' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  <List size={18} />
+                </button>
+                <button 
+                  onClick={() => setViewMode('report')}
+                  className={`p-1.5 rounded-md transition-all ${viewMode === 'report' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  <LayoutGrid size={18} />
+                </button>
+                <button 
+                  onClick={() => setViewMode('analytics')}
+                  className={`p-1.5 rounded-md transition-all ${viewMode === 'analytics' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  <BarChart3 size={18} />
+                </button>
               </div>
-            </div>
+            )}
+            <button 
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors shadow-sm"
+              onClick={() => window.print()}
+            >
+              <Printer size={16} />
+              Export PDF
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-10 max-w-7xl">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          
-          {/* LEFT COLUMN: CONTROLS */}
-          <div className="lg:col-span-4 space-y-8">
-            <section className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden">
-              <div className="p-6 bg-[#f8faf9] border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-green-100 rounded-lg"><Upload className="w-5 h-5 text-green-700" /></div>
-                  <h2 className="font-black text-slate-800 uppercase text-xs tracking-tight">Data Ingestion</h2>
-                </div>
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        {state.error && (
+          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+            <AlertCircle size={20} className="shrink-0" />
+            <p className="text-sm font-medium">{state.error}</p>
+            <button onClick={() => setState(s => ({...s, error: null}))} className="ml-auto hover:bg-red-100 p-1 rounded-full transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
+        {state.data.length === 0 && !state.isProcessing ? (
+          <div className="max-w-2xl mx-auto">
+            <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center shadow-sm">
+              <div className="bg-emerald-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Upload className="text-emerald-600 w-10 h-10" />
               </div>
-              <div className="p-8">
-                <label className="group relative flex flex-col items-center justify-center w-full min-h-[180px] border-4 border-dashed border-slate-100 rounded-[2rem] cursor-pointer bg-[#fcfdfc] hover:bg-green-50/30 hover:border-green-400 transition-all duration-500">
-                  <div className="flex flex-col items-center justify-center p-6 text-center">
-                    <FileIcon className="w-10 h-10 text-slate-300 mb-4" />
-                    <p className="mb-1 text-xs text-slate-500 font-black uppercase tracking-widest">Upload Lists</p>
-                    <p className="text-[10px] text-slate-400">PDF, JPG, PNG, CSV</p>
+              <h2 className="text-2xl font-bold text-slate-800 mb-2">Extract Personnel Data</h2>
+              <p className="text-slate-500 mb-8 max-w-md mx-auto">
+                Upload scanned clearance forms, Excel lists, or photos of NYSC documents. 
+                Our AI will automatically extract and categorize Corps member details.
+              </p>
+              
+              <div className="space-y-4">
+                <label className="block w-full cursor-pointer">
+                  <input 
+                    type="file" 
+                    multiple 
+                    className="hidden" 
+                    onChange={handleFileUpload}
+                    accept="image/*,application/pdf,.csv,.txt"
+                  />
+                  <div className="border-2 border-dashed border-slate-200 rounded-2xl py-10 px-6 hover:border-emerald-400 hover:bg-emerald-50/30 transition-all group">
+                    <div className="flex flex-col items-center">
+                      <FileSpreadsheet className="text-slate-400 group-hover:text-emerald-500 transition-colors mb-2" />
+                      <span className="text-slate-600 font-medium">Click to browse or drag and drop</span>
+                      <span className="text-slate-400 text-xs mt-1">PNG, JPG, PDF, CSV, TXT</span>
+                    </div>
                   </div>
-                  <input type="file" className="hidden" multiple accept="image/*,application/pdf,.csv" onChange={handleFileUpload} />
                 </label>
 
                 {uploadedFiles.length > 0 && (
-                  <div className="mt-8 space-y-4">
-                    <div className="flex items-center justify-between px-2">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Files Ready ({uploadedFiles.length})</span>
-                      <button onClick={() => setUploadedFiles([])} className="text-[10px] text-red-500 font-black hover:underline uppercase">Reset</button>
-                    </div>
-                    <div className="max-h-52 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                      {uploadedFiles.map((f, i) => (
-                        <div key={i} className="flex items-center justify-between p-3 bg-[#f8faf9] rounded-xl border border-slate-100">
-                          <span className="text-[10px] font-black truncate max-w-[180px] text-slate-600 uppercase">{f.name}</span>
-                          <button onClick={() => setUploadedFiles(prev => prev.filter((_, idx) => idx !== i))} className="p-1 text-slate-300 hover:text-red-500"><X className="w-3.5 h-3.5" /></button>
+                  <div className="mt-6 text-left animate-in fade-in slide-in-from-bottom-2">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-3 px-1">Selected Files ({uploadedFiles.length})</h3>
+                    <div className="space-y-2">
+                      {uploadedFiles.map((file, i) => (
+                        <div key={i} className="flex items-center justify-between bg-slate-50 border border-slate-200 p-3 rounded-xl">
+                          <div className="flex items-center gap-3">
+                            <div className="bg-white p-2 rounded-lg shadow-xs">
+                              <FileIcon size={16} className="text-slate-400" />
+                            </div>
+                            <span className="text-sm font-medium text-slate-700 truncate max-w-[200px]">{file.name}</span>
+                          </div>
+                          <button 
+                            onClick={() => removeFile(i)}
+                            className="p-1.5 hover:bg-red-100 hover:text-red-600 rounded-lg text-slate-400 transition-all"
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         </div>
                       ))}
                     </div>
+                    
                     <button 
-                      onClick={processFiles}
-                      disabled={state.isProcessing || uploadedFiles.length === 0}
-                      className="w-full mt-6 bg-[#006837] hover:bg-green-800 text-white font-black py-4 px-6 rounded-2xl shadow-xl transition-all active:scale-95 flex items-center justify-center gap-4 disabled:bg-slate-100 disabled:text-slate-300"
+                      onClick={processData}
+                      className="w-full mt-6 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-[0.98]"
                     >
-                      {state.isProcessing ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          <span className="text-xs font-black uppercase tracking-widest">{state.processingStep}...</span>
-                        </>
-                      ) : (
-                        <>
-                          <TrendingUp className="w-5 h-5" />
-                          <span className="uppercase tracking-widest text-xs">Run AI Extraction</span>
-                        </>
-                      )}
+                      Process Documents
+                      <ChevronRight size={18} />
                     </button>
                   </div>
                 )}
               </div>
-            </section>
-
-            {state.error && (
-              <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                <p className="text-[10px] font-black text-red-800 uppercase leading-tight">{state.error}</p>
-              </div>
-            )}
-
-            {groups.length > 0 && (
-              <section className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="p-6 bg-[#f8faf9] border-b border-slate-100 flex items-center gap-3">
-                  <div className="p-2 bg-green-100 rounded-lg"><MapPin className="w-5 h-5 text-green-700" /></div>
-                  <h2 className="font-black text-slate-800 uppercase text-xs tracking-tight">Organization Grouping</h2>
-                </div>
-                <div className="p-4 max-h-[400px] overflow-y-auto custom-scrollbar space-y-1">
-                  <button
-                    onClick={() => setState(s => ({ ...s, selectedGroup: null }))}
-                    className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-all ${!state.selectedGroup ? 'bg-green-600 text-white shadow-lg' : 'hover:bg-slate-50 text-slate-600'}`}
-                  >
-                    <span className="font-black text-[10px] uppercase">All Active Records</span>
-                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-black/10">{state.data.length}</span>
-                  </button>
-                  {groups.map(([name, members]) => (
-                    <button
-                      key={name}
-                      onClick={() => setState(s => ({ ...s, selectedGroup: name }))}
-                      className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-all ${state.selectedGroup === name ? 'bg-green-600 text-white shadow-lg' : 'hover:bg-[#fcfdfc] text-slate-600'}`}
-                    >
-                      <span className="text-[10px] font-black truncate max-w-[200px] uppercase tracking-tighter">{name}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-black/5">{members.length}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
-
-          {/* RIGHT COLUMN: RESULTS */}
-          <div className="lg:col-span-8 space-y-8" ref={resultsRef}>
-            {stats && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Population</p>
-                  <p className="text-3xl font-black text-slate-900">{stats.total}</p>
-                </div>
-                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Unique PPAs</p>
-                  <p className="text-3xl font-black text-green-700">{stats.ppas}</p>
-                </div>
-                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Diversity</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-[10px] font-black text-blue-600">{stats.males}M</span>
-                    <span className="text-[10px] font-black text-pink-600">{stats.females}F</span>
-                  </div>
-                </div>
-                <div className="bg-green-700 p-6 rounded-[2rem] text-white shadow-xl shadow-green-900/10">
-                  <p className="text-[9px] font-black text-green-100 uppercase tracking-widest">System Status</p>
-                  <p className="text-xl font-black uppercase mt-1">Verified</p>
-                </div>
-              </div>
-            )}
-
-            <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-100 min-h-[600px] flex flex-col overflow-hidden">
-              <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-4 flex-1">
-                   <div className="flex bg-slate-100 p-1 rounded-xl">
-                      <button onClick={() => setViewMode('table')} className={`p-2 rounded-lg transition-all ${viewMode === 'table' ? 'bg-white shadow text-green-700' : 'text-slate-400'}`}><List className="w-4 h-4" /></button>
-                      <button onClick={() => setViewMode('report')} className={`p-2 rounded-lg transition-all ${viewMode === 'report' ? 'bg-white shadow text-green-700' : 'text-slate-400'}`}><LayoutGrid className="w-4 h-4" /></button>
-                      <button onClick={() => setViewMode('analytics')} className={`p-2 rounded-lg transition-all ${viewMode === 'analytics' ? 'bg-white shadow text-green-700' : 'text-slate-400'}`}><BarChart3 className="w-4 h-4" /></button>
-                   </div>
-                   <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                    <input 
-                      type="text" placeholder="Search extracted records..."
-                      className="w-full pl-10 pr-4 py-2.5 border border-slate-100 rounded-xl focus:outline-none focus:border-green-500 text-[11px] bg-slate-50 font-black uppercase tracking-widest"
-                      value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setShowAddForm(true)} className="p-2.5 bg-green-50 text-green-700 rounded-xl border border-green-100 hover:bg-green-100 transition-colors"><Plus className="w-5 h-5" /></button>
-                  <button onClick={downloadCSV} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-[#006837] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-green-800 transition-all">
-                    <Download className="w-4 h-4" /> Export CSV
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex-1 relative">
-                {showAddForm && (
-                  <div className="absolute inset-0 z-40 bg-white p-10 overflow-y-auto">
-                    <div className="max-w-md mx-auto space-y-6">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Manual Record Entry</h3>
-                        <button onClick={() => setShowAddForm(false)} className="p-2 hover:bg-slate-100 rounded-full"><X className="w-6 h-6 text-slate-400" /></button>
-                      </div>
-                      <form onSubmit={addNewMember} className="grid grid-cols-1 gap-5">
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Full Name</label>
-                          <input required name="fullName" className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500/20 font-bold uppercase text-xs" placeholder="Surname First Name" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">State Code</label>
-                            <input required name="stateCode" className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500/20 font-bold uppercase text-xs" placeholder="NY/24B/..." />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Gender</label>
-                            <select name="gender" className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500/20 font-bold uppercase text-xs">
-                              <option value="M">Male</option>
-                              <option value="F">Female</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Assigned PPA</label>
-                          <input required name="ppa" className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500/20 font-bold uppercase text-xs" placeholder="Organization Name" />
-                        </div>
-                        <button type="submit" className="py-4 bg-green-700 text-white font-black rounded-2xl uppercase tracking-widest hover:bg-green-800 transition-colors shadow-lg shadow-green-900/20 mt-4">Commit Record</button>
-                      </form>
-                    </div>
-                  </div>
-                )}
-
-                {state.data.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full min-h-[500px] text-center p-10">
-                    <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6">
-                      <FileText className="w-10 h-10 text-slate-200" />
-                    </div>
-                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-300">Workspace Pending</h3>
-                    <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase max-w-xs leading-relaxed">Please upload clearance lists or scanned documents to begin the extraction process.</p>
-                  </div>
-                ) : (
-                  <div className="p-4 h-full overflow-y-auto">
-                    {viewMode === 'table' && (
-                      <div className="overflow-x-auto rounded-2xl border border-slate-50">
-                        <table className="w-full text-[10px] text-left border-collapse">
-                          <thead className="bg-[#f8faf9] text-slate-400 uppercase text-[8px] font-black border-b border-slate-100 sticky top-0 z-10">
-                            <tr>
-                              <th className="px-6 py-4">SN</th>
-                              <th className="px-6 py-4">State Code</th>
-                              <th className="px-6 py-4">Full Name</th>
-                              <th className="px-6 py-4">Sex</th>
-                              <th className="px-6 py-4">Assigned PPA</th>
-                              <th className="px-6 py-4 text-right">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-50">
-                            {filteredMembers.map((m) => (
-                              <tr key={m.id} className="hover:bg-green-50/20 group transition-colors">
-                                <td className="px-6 py-4 text-slate-300 font-mono">{m.sn}</td>
-                                <td className="px-6 py-4 font-black text-slate-800 uppercase tracking-tighter">{m.stateCode}</td>
-                                <td className="px-6 py-4 font-bold text-slate-600 uppercase">{m.fullName}</td>
-                                <td className="px-6 py-4">
-                                  <span className={`px-2 py-0.5 rounded-[4px] font-black ${(m.gender || 'M').charAt(0) === 'F' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>
-                                    {(m.gender || 'M').charAt(0)}
-                                  </span>
-                                </td>
-                                <td className="px-6 py-4 font-black text-slate-400 uppercase tracking-tighter truncate max-w-[150px]">{m.companyName}</td>
-                                <td className="px-6 py-4 text-right opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <button onClick={() => deleteMember(m.id)} className="text-red-400 hover:text-red-600 p-2"><Trash2 className="w-3.5 h-3.5" /></button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-
-                    {viewMode === 'report' && (
-                      <div className="space-y-8 p-4">
-                        <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-center gap-3 mb-6 no-print">
-                           <Info className="w-5 h-5 text-blue-400 shrink-0" />
-                           <p className="text-[10px] font-black text-blue-800 uppercase">Pro Tip: Use 'Print' (Ctrl+P) to save this grouped report as a PDF.</p>
-                        </div>
-                        {groups.filter(([ppa]) => !state.selectedGroup || ppa === state.selectedGroup).map(([ppa, members]) => (
-                          <div key={ppa} className="bg-white rounded-2xl border-2 border-slate-50 p-10 page-break-after-always shadow-sm">
-                            <div className="flex justify-between items-end border-b-2 border-slate-900 pb-4 mb-8">
-                               <div>
-                                 <p className="text-[8px] font-black text-slate-400 uppercase mb-1 tracking-widest">Posting Group</p>
-                                 <h3 className="font-black text-green-800 text-2xl uppercase tracking-tighter">{ppa}</h3>
-                               </div>
-                               <div className="text-right">
-                                 <p className="text-[8px] font-black text-slate-400 uppercase mb-1 tracking-widest">Population</p>
-                                 <span className="text-xs font-black text-slate-900 px-3 py-1 bg-slate-100 rounded-full">{members.length} MEMBERS</span>
-                               </div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                              {members.map((m) => (
-                                <div key={m.id} className="flex gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-green-200 transition-colors">
-                                  <div className={`w-12 h-12 shrink-0 rounded-xl flex items-center justify-center font-black text-sm ${(m.gender || 'M').charAt(0) === 'F' ? 'bg-pink-100 text-pink-500' : 'bg-blue-100 text-blue-500'}`}>
-                                    {(m.fullName || 'U').charAt(0)}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-xs font-black text-slate-900 uppercase truncate">{m.fullName}</p>
-                                    <p className="text-[10px] font-black text-green-700 mt-0.5">{m.stateCode}</p>
-                                    <p className="text-[9px] font-bold text-slate-400 mt-2 uppercase">{m.phone || 'No Phone Data'}</p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {viewMode === 'analytics' && stats && (
-                      <div className="p-8 space-y-12 max-w-5xl mx-auto">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                          <div>
-                             <h4 className="text-[10px] font-black text-slate-400 uppercase mb-8 tracking-widest flex items-center gap-2">
-                               <PieChart className="w-3.5 h-3.5" /> PPA Distribution Matrix
-                             </h4>
-                             <div className="space-y-6">
-                                {groups.slice(0, 10).map(([name, members]) => (
-                                  <div key={name} className="space-y-1.5">
-                                    <div className="flex justify-between text-[10px] font-black text-slate-600 uppercase">
-                                      <span className="truncate max-w-[80%]">{name}</span>
-                                      <span>{members.length}</span>
-                                    </div>
-                                    <div className="h-3 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
-                                      <div className="h-full bg-green-500 transition-all duration-1000 ease-out" style={{width: `${(members.length / stats.total) * 100}%`}}></div>
-                                    </div>
-                                  </div>
-                                ))}
-                             </div>
-                          </div>
-                          
-                          <div className="bg-slate-50 rounded-[3rem] p-10 flex flex-col items-center justify-center border border-slate-100">
-                             <div className="relative w-56 h-56 mb-10">
-                                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                                  <circle className="text-blue-500" strokeWidth="12" stroke="currentColor" fill="transparent" r="40" cx="50" cy="50" strokeDasharray={`${stats.malePercent * 2.51} 251`} />
-                                  <circle className="text-pink-500" strokeWidth="12" stroke="currentColor" fill="transparent" r="40" cx="50" cy="50" strokeDasharray={`${stats.femalePercent * 2.51} 251`} strokeDashoffset={`${-stats.malePercent * 2.51}`} />
-                                </svg>
-                                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                                  <p className="text-4xl font-black text-slate-900">{stats.total}</p>
-                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Total Corps</p>
-                                </div>
-                             </div>
-                             <div className="flex gap-12 w-full">
-                               <div className="flex-1 text-center">
-                                 <p className="text-xl font-black text-blue-600">{stats.males}</p>
-                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Male Count</p>
-                                 <p className="text-[10px] font-bold text-slate-300">{stats.malePercent}%</p>
-                               </div>
-                               <div className="flex-1 text-center border-l border-slate-200">
-                                 <p className="text-xl font-black text-pink-600">{stats.females}</p>
-                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Female Count</p>
-                                 <p className="text-[10px] font-bold text-slate-300">{stats.femalePercent}%</p>
-                               </div>
-                             </div>
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 pt-12 border-t border-slate-100">
-                           <div className="text-center p-8 bg-white rounded-[2rem] border border-slate-100 shadow-sm">
-                              <Users className="w-6 h-6 text-green-200 mx-auto mb-4" />
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Density Index</p>
-                              <p className="text-3xl font-black text-slate-900">{(stats.total / (stats.ppas || 1)).toFixed(1)}</p>
-                           </div>
-                           <div className="text-center p-8 bg-white rounded-[2rem] border border-slate-100 shadow-sm">
-                              <MapPin className="w-6 h-6 text-green-200 mx-auto mb-4" />
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Locations</p>
-                              <p className="text-3xl font-black text-slate-900">{stats.ppas}</p>
-                           </div>
-                           <div className="text-center p-8 bg-white rounded-[2rem] border border-slate-100 shadow-sm">
-                              <TrendingUp className="w-6 h-6 text-green-200 mx-auto mb-4" />
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Success Rate</p>
-                              <p className="text-3xl font-black text-green-600">99.8%</p>
-                           </div>
-                           <div className="text-center p-8 bg-[#006837] rounded-[2rem] shadow-xl shadow-green-900/20">
-                              <CheckCircle2 className="w-6 h-6 text-green-100 mx-auto mb-4" />
-                              <p className="text-[9px] font-black text-green-100 uppercase tracking-widest mb-1">Audit Ready</p>
-                              <p className="text-3xl font-black text-white uppercase">Pass</p>
-                           </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {state.data.length > 0 && (
-                <div className="px-8 py-5 bg-[#f8faf9] border-t border-slate-100 flex justify-between items-center text-[9px] font-black text-slate-400 uppercase tracking-[0.15em]">
-                  <div className="flex items-center gap-6">
-                    <span>Audit Registry: {filteredMembers.length} records</span>
-                    {state.selectedGroup && (
-                      <button onClick={() => setState(s => ({...s, selectedGroup: null}))} className="flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-700 rounded-full hover:bg-green-200 transition-colors">
-                        Filtering by PPA <X className="w-2.5 h-2.5" />
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex gap-8">
-                    <button onClick={() => window.print()} className="flex items-center gap-1.5 hover:text-slate-800 transition-colors"><Printer className="w-4 h-4" /> Hard Copy Print</button>
-                    <div className="flex items-center gap-1.5 text-green-600"><CheckCircle2 className="w-4 h-4" /> Extractor Sync Complete</div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
-        </div>
+        ) : state.isProcessing ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in duration-500">
+            <div className="relative mb-8">
+              <div className="w-24 h-24 rounded-full border-4 border-emerald-100 border-t-emerald-600 animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Loader2 className="text-emerald-600 animate-pulse" size={32} />
+              </div>
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">
+              {state.processingStep === 'scanning' ? 'Scanning Documents...' : 
+               state.processingStep === 'extracting' ? 'Analyzing Text with Gemini AI...' : 
+               'Finalizing Data...'}
+            </h2>
+          </div>
+        ) : (
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            {/* Stats Dashboard */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <p className="text-slate-500 text-sm font-medium mb-1">Total Corps Members</p>
+                <div className="flex items-end justify-between">
+                  <h3 className="text-3xl font-bold text-slate-900">{stats.total}</h3>
+                  <div className="bg-emerald-50 text-emerald-700 p-1.5 rounded-lg">
+                    <Users size={18} />
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <p className="text-slate-500 text-sm font-medium mb-1">PPA Organizations</p>
+                <div className="flex items-end justify-between">
+                  <h3 className="text-3xl font-bold text-slate-900">{stats.uniquePPAs}</h3>
+                  <div className="bg-blue-50 text-blue-700 p-1.5 rounded-lg">
+                    <MapPin size={18} />
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <p className="text-slate-500 text-sm font-medium mb-1">Male</p>
+                <div className="flex items-end justify-between">
+                  <h3 className="text-3xl font-bold text-slate-900">{stats.males}</h3>
+                  <div className="bg-indigo-50 text-indigo-700 p-1.5 rounded-lg">
+                    <TrendingUp size={18} />
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <p className="text-slate-500 text-sm font-medium mb-1">Female</p>
+                <div className="flex items-end justify-between">
+                  <h3 className="text-3xl font-bold text-slate-900">{stats.females}</h3>
+                  <div className="bg-pink-50 text-pink-700 p-1.5 rounded-lg">
+                    <TrendingUp size={18} className="rotate-180" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Controls */}
+            <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+              <div className="relative w-full md:w-96">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input 
+                  type="text" 
+                  placeholder="Search by name, state code, or PPA..."
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all shadow-sm"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <button 
+                  onClick={() => {
+                    setState(prev => ({ ...prev, data: [] }));
+                    setUploadedFiles([]);
+                  }}
+                  className="px-4 py-2.5 border border-slate-200 rounded-xl text-slate-600 font-medium hover:bg-slate-50 transition-colors flex items-center gap-2 whitespace-nowrap"
+                >
+                  <Trash2 size={18} />
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            {/* Main Content Area */}
+            {viewMode === 'table' ? (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200">
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">SN</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">State Code</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Full Name</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Gender</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Phone</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">PPA</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredData.map((member) => (
+                        <tr key={member.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-6 py-4 text-sm text-slate-500">{member.sn}</td>
+                          <td className="px-6 py-4 text-sm font-mono font-medium text-emerald-700">{member.stateCode}</td>
+                          <td className="px-6 py-4 text-sm font-bold text-slate-800">{member.fullName}</td>
+                          <td className="px-6 py-4 text-sm">
+                            <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase ${member.gender === 'M' ? 'bg-indigo-50 text-indigo-600' : 'bg-pink-50 text-pink-600'}`}>
+                              {member.gender === 'M' ? 'Male' : 'Female'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-600">{member.phone}</td>
+                          <td className="px-6 py-4 text-sm font-medium text-slate-700 uppercase">{member.companyName}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : viewMode === 'report' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {Object.entries(ppaGroups).map(([ppa, members]) => (
+                  <div key={ppa} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                      <h3 className="font-bold text-slate-800 text-xs truncate uppercase">{ppa}</h3>
+                      <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded-full">{members.length}</span>
+                    </div>
+                    <div className="p-4 space-y-3 max-h-96 overflow-y-auto">
+                      {members.map(m => (
+                        <div key={m.id} className="flex items-start gap-3">
+                          <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold ${m.gender === 'M' ? 'bg-indigo-100 text-indigo-600' : 'bg-pink-100 text-pink-600'}`}>
+                            {m.fullName.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-800">{m.fullName}</p>
+                            <p className="text-xs text-slate-500">{m.stateCode}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                  <div className="flex items-center gap-2 mb-6">
+                    <PieChart className="text-emerald-600" size={20} />
+                    <h3 className="font-bold text-slate-800">Gender Balance</h3>
+                  </div>
+                  <div className="flex items-center justify-around py-8">
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-indigo-600">{Math.round((stats.males / stats.total) * 100 || 0)}%</div>
+                      <p className="text-sm text-slate-500">Male</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-pink-600">{Math.round((stats.females / stats.total) * 100 || 0)}%</div>
+                      <p className="text-sm text-slate-500">Female</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                  <div className="flex items-center gap-2 mb-6">
+                    <BarChart3 className="text-emerald-600" size={20} />
+                    <h3 className="font-bold text-slate-800">Top PPA Allocations</h3>
+                  </div>
+                  <div className="space-y-4">
+                    {Object.entries(ppaGroups)
+                      .sort((a, b) => b[1].length - a[1].length)
+                      .slice(0, 5)
+                      .map(([ppa, members]) => (
+                        <div key={ppa}>
+                          <div className="flex justify-between text-[10px] font-bold mb-1 uppercase text-slate-600">
+                            <span className="truncate">{ppa}</span>
+                            <span>{members.length}</span>
+                          </div>
+                          <div className="w-full bg-slate-100 h-1.5 rounded-full">
+                            <div 
+                              className="bg-emerald-500 h-full rounded-full" 
+                              style={{ width: `${(members.length / stats.total) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );
-}
+};
 
 export default App;
