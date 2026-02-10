@@ -1,5 +1,6 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
-import { ExtractionResponse } from "../types.ts";
+import { ExtractionResponse } from "../types";
 
 export interface FileData {
   data: string; // base64 for images/pdf, or raw text for csv
@@ -8,7 +9,7 @@ export interface FileData {
 }
 
 export const extractCorpsData = async (files: FileData[]): Promise<ExtractionResponse> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
   const model = 'gemini-3-flash-preview';
 
   const parts = files.map(file => {
@@ -25,24 +26,10 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
 
   const prompt = `
     TASK: Extract list-based data from the provided documents.
-    
-    CONTEXT: 
-    - These are official personnel lists or clearance documents.
-    - Columns typically include: Serial Number (SN), State Code (e.g., NY/24B/1234), Full Name, Gender, Phone, and PPA (Organization).
-    
-    CRITICAL INSTRUCTION FOR GROUPING:
-    - Lists are often grouped by PPA (Place of Primary Assignment). 
-    - The PPA name might appear once as a header or title ABOVE a table of names.
-    - You MUST assign that header name to every "companyName" field for all individuals listed under it until a new header is found.
-    
-    EXTRACTION REQUIREMENTS:
-    1. Normalize Name to UPPERCASE.
-    2. Normalize Gender to exactly "M" or "F".
-    3. If PPA is not found, use "Unassigned".
-    4. Generate a unique "id" string for every record.
-    5. Extract EVERY person listed. Do not skip anyone.
-    
-    Return the data in a JSON object with a "members" array.
+    CONTEXT: personnel lists or clearance documents.
+    Columns: Serial Number (SN), State Code, Full Name, Gender, Phone, and PPA.
+    Note: PPA name might appear once as a header above a table. Assign it to everyone in that group.
+    Return JSON with a "members" array.
   `;
 
   try {
@@ -80,8 +67,6 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
     if (!text) throw new Error("AI returned empty content");
     
     const parsed = JSON.parse(text) as ExtractionResponse;
-    
-    // Final cleanup to ensure consistency
     parsed.members = parsed.members.map(m => ({
       ...m,
       gender: (m.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M',
