@@ -21,7 +21,6 @@ const App: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'report' | 'analytics'>('table');
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -59,7 +58,6 @@ const App: React.FC = () => {
     setShowSuccess(false);
     
     try {
-      // Simulation steps for UX
       await new Promise(r => setTimeout(r, 1000));
       setState(s => ({ ...s, processingStep: 'extracting' }));
       
@@ -144,15 +142,15 @@ const App: React.FC = () => {
 
   const stats = useMemo(() => {
     if (state.data.length === 0) return null;
-    const males = state.data.filter(m => m.gender === 'M' || m.gender === 'Male').length;
-    const females = state.data.filter(m => m.gender === 'F' || m.gender === 'Female').length;
+    const males = state.data.filter(m => m.gender.toUpperCase().startsWith('M')).length;
+    const females = state.data.filter(m => m.gender.toUpperCase().startsWith('F')).length;
     return {
       total: state.data.length,
       ppas: groups.length,
       males,
       females,
-      malePercent: Math.round((males / state.data.length) * 100),
-      femalePercent: Math.round((females / state.data.length) * 100),
+      malePercent: Math.round((males / state.data.length) * 100) || 0,
+      femalePercent: Math.round((females / state.data.length) * 100) || 0,
     };
   }, [state.data, groups]);
 
@@ -190,7 +188,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f0f4f2] font-sans text-slate-900 pb-20">
-      {/* Dynamic Header */}
       <header className="sticky top-0 z-50 bg-[#006837] text-white border-b-4 border-[#FFD700] shadow-xl">
         <div className="container mx-auto px-4 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -215,9 +212,7 @@ const App: React.FC = () => {
       <main className="container mx-auto px-4 py-10 max-w-7xl">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
           
-          {/* Sidebar / Configuration */}
           <div className="lg:col-span-4 space-y-8">
-            {/* 1. Upload Section */}
             <section className="bg-white rounded-[2rem] shadow-xl shadow-green-900/5 border border-slate-100 overflow-hidden group">
               <div className="p-6 bg-[#f8faf9] border-b border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -281,7 +276,6 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* Error Message Box */}
             {state.error && (
               <div className="bg-red-50 border border-red-200 rounded-[2rem] p-6 shadow-lg shadow-red-900/5 animate-in slide-in-from-left-4 duration-300 relative group">
                 <div className="flex items-start gap-4">
@@ -291,16 +285,12 @@ const App: React.FC = () => {
                     <p className="text-xs font-bold text-red-800 leading-relaxed uppercase tracking-tight">{state.error}</p>
                   </div>
                 </div>
-                <button 
-                  onClick={dismissError}
-                  className="absolute top-4 right-4 p-2 text-red-300 hover:text-red-600 hover:bg-red-100 rounded-full transition-all"
-                >
+                <button onClick={dismissError} className="absolute top-4 right-4 p-2 text-red-300 hover:text-red-600 hover:bg-red-100 rounded-full transition-all">
                   <X className="w-4 h-4" />
                 </button>
               </div>
             )}
 
-            {/* 2. PPA Groups Sidebar */}
             {groups.length > 0 && (
               <section className="bg-white rounded-[2rem] shadow-xl shadow-green-900/5 border border-slate-100 overflow-hidden animate-in fade-in duration-700">
                 <div className="p-6 bg-[#f8faf9] border-b border-slate-100 flex items-center gap-3">
@@ -338,9 +328,7 @@ const App: React.FC = () => {
             )}
           </div>
 
-          {/* Results Area */}
           <div className="lg:col-span-8 space-y-10" ref={resultsRef}>
-            {/* 1. Dynamic Stats Dashboard */}
             {stats && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6 animate-in slide-in-from-top-6 duration-1000">
                 <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
@@ -371,28 +359,17 @@ const App: React.FC = () => {
               </div>
             )}
 
-            {/* 2. Main Data Workbench */}
             <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-green-900/5 border border-slate-100 flex flex-col min-h-[750px] overflow-hidden">
-              {/* Data Toolbar */}
               <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white sticky top-0 z-20">
                 <div className="flex items-center gap-4">
                    <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-                      <button 
-                        onClick={() => setViewMode('table')}
-                        className={`p-3 rounded-xl transition-all ${viewMode === 'table' ? 'bg-white shadow-md text-green-700 scale-105' : 'text-slate-400 hover:text-slate-600'}`}
-                      >
+                      <button onClick={() => setViewMode('table')} className={`p-3 rounded-xl transition-all ${viewMode === 'table' ? 'bg-white shadow-md text-green-700 scale-105' : 'text-slate-400 hover:text-slate-600'}`}>
                         <List className="w-5 h-5" />
                       </button>
-                      <button 
-                        onClick={() => setViewMode('report')}
-                        className={`p-3 rounded-xl transition-all ${viewMode === 'report' ? 'bg-white shadow-md text-green-700 scale-105' : 'text-slate-400 hover:text-slate-600'}`}
-                      >
+                      <button onClick={() => setViewMode('report')} className={`p-3 rounded-xl transition-all ${viewMode === 'report' ? 'bg-white shadow-md text-green-700 scale-105' : 'text-slate-400 hover:text-slate-600'}`}>
                         <LayoutGrid className="w-5 h-5" />
                       </button>
-                      <button 
-                        onClick={() => setViewMode('analytics')}
-                        className={`p-3 rounded-xl transition-all ${viewMode === 'analytics' ? 'bg-white shadow-md text-green-700 scale-105' : 'text-slate-400 hover:text-slate-600'}`}
-                      >
+                      <button onClick={() => setViewMode('analytics')} className={`p-3 rounded-xl transition-all ${viewMode === 'analytics' ? 'bg-white shadow-md text-green-700 scale-105' : 'text-slate-400 hover:text-slate-600'}`}>
                         <BarChart3 className="w-5 h-5" />
                       </button>
                    </div>
@@ -409,27 +386,17 @@ const App: React.FC = () => {
                 </div>
                 
                 <div className="flex items-center gap-3">
-                  <button 
-                    onClick={() => setShowAddForm(true)}
-                    className="p-3.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-2xl transition-all border border-green-100"
-                    title="Manual Add"
-                  >
+                  <button onClick={() => setShowAddForm(true)} className="p-3.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-2xl transition-all border border-green-100" title="Manual Add">
                     <Plus className="w-5 h-5" />
                   </button>
-                  <button 
-                    onClick={downloadCSV}
-                    disabled={filteredMembers.length === 0}
-                    className="flex-1 md:flex-none flex items-center justify-center gap-3 px-8 py-3.5 bg-[#006837] hover:bg-green-800 text-white text-xs font-black uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-green-900/10 disabled:opacity-20 active:scale-95"
-                  >
+                  <button onClick={downloadCSV} disabled={filteredMembers.length === 0} className="flex-1 md:flex-none flex items-center justify-center gap-3 px-8 py-3.5 bg-[#006837] hover:bg-green-800 text-white text-xs font-black uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-green-900/10 disabled:opacity-20 active:scale-95">
                     <Download className="w-4 h-4" />
                     Export
                   </button>
                 </div>
               </div>
 
-              {/* Data Content */}
               <div className="flex-1 relative p-2">
-                {/* Manual Add Form Overlay */}
                 {showAddForm && (
                   <div className="absolute inset-0 z-40 bg-white/95 backdrop-blur-md p-10 animate-in fade-in zoom-in-95">
                     <div className="max-w-xl mx-auto space-y-8">
@@ -500,33 +467,18 @@ const App: React.FC = () => {
                               <tr key={m.id} className="hover:bg-green-50/20 transition-all group">
                                 <td className="px-8 py-5 text-slate-300 font-mono text-[10px]">{m.sn}</td>
                                 <td className="px-8 py-5">
-                                  <input 
-                                    className="bg-transparent border-none font-black text-slate-800 tracking-tighter w-full focus:outline-none focus:ring-2 focus:ring-green-500/10 rounded uppercase"
-                                    value={m.stateCode}
-                                    onChange={(e) => handleEditChange(m.id, 'stateCode', e.target.value)}
-                                  />
+                                  <input className="bg-transparent border-none font-black text-slate-800 tracking-tighter w-full focus:outline-none focus:ring-2 focus:ring-green-500/10 rounded uppercase" value={m.stateCode} onChange={(e) => handleEditChange(m.id, 'stateCode', e.target.value)} />
                                 </td>
                                 <td className="px-8 py-5 uppercase">
-                                   <input 
-                                    className="bg-transparent border-none font-bold text-slate-600 w-full focus:outline-none focus:ring-2 focus:ring-green-500/10 rounded"
-                                    value={m.fullName}
-                                    onChange={(e) => handleEditChange(m.id, 'fullName', e.target.value)}
-                                  />
+                                   <input className="bg-transparent border-none font-bold text-slate-600 w-full focus:outline-none focus:ring-2 focus:ring-green-500/10 rounded" value={m.fullName} onChange={(e) => handleEditChange(m.id, 'fullName', e.target.value)} />
                                 </td>
                                 <td className="px-8 py-5">
-                                  <button 
-                                    onClick={() => handleEditChange(m.id, 'gender', m.gender.toUpperCase().startsWith('M') ? 'F' : 'M')}
-                                    className={`px-3 py-1 rounded-lg text-[9px] font-black shadow-sm ${m.gender.toUpperCase().startsWith('F') ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}
-                                  >
+                                  <button onClick={() => handleEditChange(m.id, 'gender', m.gender.toUpperCase().startsWith('M') ? 'F' : 'M')} className={`px-3 py-1 rounded-lg text-[9px] font-black shadow-sm ${m.gender.toUpperCase().startsWith('F') ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>
                                     {m.gender.charAt(0).toUpperCase()}
                                   </button>
                                 </td>
                                 <td className="px-8 py-5">
-                                  <input 
-                                    className="bg-slate-50 border border-transparent hover:border-slate-100 text-slate-500 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter w-full focus:bg-white focus:ring-4 focus:ring-green-500/10 transition-all"
-                                    value={m.companyName}
-                                    onChange={(e) => handleEditChange(m.id, 'companyName', e.target.value)}
-                                  />
+                                  <input className="bg-slate-50 border border-transparent hover:border-slate-100 text-slate-500 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter w-full focus:bg-white focus:ring-4 focus:ring-green-500/10 transition-all" value={m.companyName} onChange={(e) => handleEditChange(m.id, 'companyName', e.target.value)} />
                                 </td>
                                 <td className="px-8 py-5 text-right opacity-0 group-hover:opacity-100 transition-all">
                                   <button onClick={() => deleteMember(m.id)} className="p-3 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all">
@@ -542,9 +494,7 @@ const App: React.FC = () => {
 
                     {viewMode === 'report' && (
                       <div className="space-y-10 p-6">
-                        {groups
-                          .filter(([ppa]) => !state.selectedGroup || ppa === state.selectedGroup)
-                          .map(([ppa, members]) => (
+                        {groups.filter(([ppa]) => !state.selectedGroup || ppa === state.selectedGroup).map(([ppa, members]) => (
                           <div key={ppa} className="bg-white rounded-[2rem] border-2 border-slate-100 overflow-hidden shadow-sm page-break-after-always">
                             <div className="bg-[#f8faf9] px-8 py-6 border-b border-slate-100 flex items-center justify-between">
                               <div className="flex items-center gap-4">
@@ -590,10 +540,7 @@ const App: React.FC = () => {
                                     <span className="text-[10px] font-black text-green-700">{members.length}</span>
                                   </div>
                                   <div className="h-4 bg-slate-50 rounded-full overflow-hidden">
-                                    <div 
-                                      className="h-full bg-green-600 rounded-full transition-all duration-1000" 
-                                      style={{width: `${(members.length / state.data.length) * 100}%`}}
-                                    ></div>
+                                    <div className="h-full bg-green-600 rounded-full transition-all duration-1000" style={{width: `${(members.length / state.data.length) * 100}%`}}></div>
                                   </div>
                                 </div>
                               ))}
@@ -620,7 +567,6 @@ const App: React.FC = () => {
                 )}
               </div>
 
-              {/* Status Footer */}
               {state.data.length > 0 && (
                 <div className="p-6 bg-[#f8faf9] border-t border-slate-100 text-[10px] text-slate-400 flex justify-between items-center font-black uppercase tracking-widest">
                   <div className="flex items-center gap-6">
@@ -641,24 +587,16 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Persistent Floating Controls for Mobile */}
       <div className="fixed bottom-6 inset-x-6 lg:hidden z-50">
          <div className="bg-white/90 backdrop-blur-2xl border border-slate-200 p-4 rounded-[2rem] shadow-2xl flex gap-4">
             {!state.data.length ? (
-              <button 
-                onClick={processFiles}
-                disabled={state.isProcessing || uploadedFiles.length === 0}
-                className="flex-1 bg-green-700 text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-3 disabled:bg-slate-100 disabled:text-slate-300"
-              >
+              <button onClick={processFiles} disabled={state.isProcessing || uploadedFiles.length === 0} className="flex-1 bg-green-700 text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-3 disabled:bg-slate-100 disabled:text-slate-300">
                 {state.isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <TrendingUp className="w-5 h-5" />}
                 {state.isProcessing ? 'Analyzing...' : 'START EXTRACTION'}
               </button>
             ) : (
               <>
-                <button 
-                  onClick={() => resultsRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                  className="flex-1 bg-slate-900 text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
-                >
+                <button onClick={() => resultsRef.current?.scrollIntoView({ behavior: 'smooth' })} className="flex-1 bg-slate-900 text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-2 text-xs uppercase tracking-widest">
                   <List className="w-4 h-4" />
                   View Results
                 </button>
