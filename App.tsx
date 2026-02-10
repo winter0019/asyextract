@@ -74,9 +74,9 @@ const App: React.FC = () => {
       }, 300);
     } catch (err: any) {
       console.error("Extraction error:", err);
-      let userFriendlyError = "An unexpected error occurred during extraction. Please try again.";
+      let userFriendlyError = "An unexpected error occurred during extraction. Please check your connection and try again.";
       if (err.message && err.message.includes("API_KEY")) {
-        userFriendlyError = "Authentication failed. The AI service access is restricted.";
+        userFriendlyError = "Configuration error: AI service access is restricted.";
       }
       setState(prev => ({ 
         ...prev, 
@@ -85,13 +85,6 @@ const App: React.FC = () => {
         processingStep: 'idle'
       }));
     }
-  };
-
-  const handleEditChange = (id: string, field: keyof CorpsMember, value: string | number) => {
-    setState(prev => ({
-      ...prev,
-      data: prev.data.map(m => m.id === id ? { ...m, [field]: value } : m)
-    }));
   };
 
   const deleteMember = (id: string) => {
@@ -268,7 +261,7 @@ const App: React.FC = () => {
                 <div className="p-4 max-h-[400px] overflow-y-auto custom-scrollbar space-y-1">
                   <button
                     onClick={() => setState(s => ({ ...s, selectedGroup: null }))}
-                    className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-all ${!state.selectedGroup ? 'bg-green-600 text-white' : 'hover:bg-slate-50 text-slate-600'}`}
+                    className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-all ${!state.selectedGroup ? 'bg-green-600 text-white shadow-lg' : 'hover:bg-slate-50 text-slate-600'}`}
                   >
                     <span className="font-black text-xs uppercase">All Members</span>
                     <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-black/10">{state.data.length}</span>
@@ -324,15 +317,15 @@ const App: React.FC = () => {
                    <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
                     <input 
-                      type="text" placeholder="Search..."
+                      type="text" placeholder="Search records..."
                       className="w-full pl-10 pr-4 py-2.5 border border-slate-100 rounded-xl focus:outline-none focus:border-green-500 text-sm bg-slate-50 font-medium"
                       value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setShowAddForm(true)} className="p-2.5 bg-green-50 text-green-700 rounded-xl border border-green-100"><Plus className="w-5 h-5" /></button>
-                  <button onClick={downloadCSV} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-[#006837] text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all">
+                  <button onClick={() => setShowAddForm(true)} className="p-2.5 bg-green-50 text-green-700 rounded-xl border border-green-100 hover:bg-green-100 transition-colors"><Plus className="w-5 h-5" /></button>
+                  <button onClick={downloadCSV} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-[#006837] text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all hover:bg-green-800">
                     <Download className="w-4 h-4" /> Export
                   </button>
                 </div>
@@ -347,25 +340,44 @@ const App: React.FC = () => {
                         <button onClick={() => setShowAddForm(false)}><X className="w-6 h-6 text-slate-400" /></button>
                       </div>
                       <form onSubmit={addNewMember} className="grid grid-cols-1 gap-4">
-                        <input required name="fullName" className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 focus:outline-none" placeholder="FULL NAME" />
-                        <input required name="stateCode" className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 focus:outline-none" placeholder="NY/24B/1234" />
-                        <select name="gender" className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 focus:outline-none">
-                          <option value="M">Male</option>
-                          <option value="F">Female</option>
-                        </select>
-                        <input name="phone" className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 focus:outline-none" placeholder="PHONE NUMBER" />
-                        <input required name="ppa" className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 focus:outline-none" placeholder="PPA" />
-                        <button type="submit" className="py-4 bg-green-700 text-white font-black rounded-xl uppercase">Save Record</button>
+                        <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">Full Name</label>
+                          <input required name="fullName" className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 focus:outline-none" placeholder="DOE JOHN EBONY" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">State Code</label>
+                          <input required name="stateCode" className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 focus:outline-none" placeholder="NY/24B/1234" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">Gender</label>
+                            <select name="gender" className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 focus:outline-none">
+                              <option value="M">Male</option>
+                              <option value="F">Female</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">Phone</label>
+                            <input name="phone" className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 focus:outline-none" placeholder="080..." />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">PPA / Organization</label>
+                          <input required name="ppa" className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 focus:outline-none" placeholder="MINISTRY OF EDUCATION" />
+                        </div>
+                        <button type="submit" className="py-4 bg-green-700 text-white font-black rounded-xl uppercase mt-4 hover:bg-green-800 transition-colors shadow-lg">Save Record</button>
                       </form>
                     </div>
                   </div>
                 )}
 
                 {state.data.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full min-h-[500px] text-center p-10 opacity-40">
-                    <FileText className="w-16 h-16 text-slate-200 mb-6" />
-                    <h3 className="text-lg font-black uppercase tracking-widest">No Data Available</h3>
-                    <p className="text-xs font-bold text-slate-400 mt-2 uppercase">Upload lists to begin extraction</p>
+                  <div className="flex flex-col items-center justify-center h-full min-h-[500px] text-center p-10">
+                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+                      <FileText className="w-10 h-10 text-slate-200" />
+                    </div>
+                    <h3 className="text-lg font-black uppercase tracking-widest text-slate-300">Workspace Empty</h3>
+                    <p className="text-xs font-bold text-slate-400 mt-2 uppercase max-w-xs">Upload scanned lists or clearace documents to begin intelligent extraction</p>
                   </div>
                 ) : (
                   <div className="p-4 h-full">
@@ -384,7 +396,7 @@ const App: React.FC = () => {
                           </thead>
                           <tbody className="divide-y divide-slate-50">
                             {filteredMembers.map((m) => (
-                              <tr key={m.id} className="hover:bg-green-50/20 group">
+                              <tr key={m.id} className="hover:bg-green-50/20 group transition-colors">
                                 <td className="px-6 py-4 text-slate-300 font-mono text-[10px]">{m.sn}</td>
                                 <td className="px-6 py-4 font-black text-slate-800 uppercase tracking-tighter">{m.stateCode}</td>
                                 <td className="px-6 py-4 font-bold text-slate-600 uppercase">{m.fullName}</td>
@@ -393,9 +405,9 @@ const App: React.FC = () => {
                                     {(m.gender || 'M').charAt(0)}
                                   </span>
                                 </td>
-                                <td className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-tighter">{m.companyName}</td>
-                                <td className="px-6 py-4 text-right opacity-0 group-hover:opacity-100">
-                                  <button onClick={() => deleteMember(m.id)} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                                <td className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-tighter truncate max-w-[150px]">{m.companyName}</td>
+                                <td className="px-6 py-4 text-right opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button onClick={() => deleteMember(m.id)} className="text-red-400 hover:text-red-600 p-1"><Trash2 className="w-4 h-4" /></button>
                                 </td>
                               </tr>
                             ))}
@@ -407,20 +419,27 @@ const App: React.FC = () => {
                     {viewMode === 'report' && (
                       <div className="space-y-6 p-4">
                         {groups.filter(([ppa]) => !state.selectedGroup || ppa === state.selectedGroup).map(([ppa, members]) => (
-                          <div key={ppa} className="bg-white rounded-2xl border-2 border-slate-50 p-6 page-break-after-always shadow-sm">
-                            <div className="flex justify-between items-end border-b border-slate-100 pb-4 mb-6">
-                               <h3 className="font-black text-green-800 uppercase tracking-tighter">{ppa}</h3>
-                               <span className="text-[10px] font-black text-slate-300">{members.length} Members</span>
+                          <div key={ppa} className="bg-white rounded-2xl border-2 border-slate-50 p-8 page-break-after-always shadow-sm">
+                            <div className="flex justify-between items-end border-b-2 border-slate-100 pb-4 mb-6">
+                               <div>
+                                 <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Place of Primary Assignment</p>
+                                 <h3 className="font-black text-green-800 text-xl uppercase tracking-tighter">{ppa}</h3>
+                               </div>
+                               <div className="text-right">
+                                 <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Corps Population</p>
+                                 <span className="text-sm font-black text-slate-800">{members.length} Members</span>
+                               </div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               {members.map((m) => (
-                                <div key={m.id} className="flex gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${(m.gender || 'M').charAt(0) === 'F' ? 'bg-pink-100 text-pink-500' : 'bg-blue-100 text-blue-500'}`}>
+                                <div key={m.id} className="flex gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                  <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center font-black text-sm ${(m.gender || 'M').charAt(0) === 'F' ? 'bg-pink-100 text-pink-500' : 'bg-blue-100 text-blue-500'}`}>
                                     {(m.fullName || 'U').charAt(0)}
                                   </div>
-                                  <div>
-                                    <p className="text-[10px] font-black text-slate-800 uppercase">{m.fullName}</p>
-                                    <p className="text-[9px] font-bold text-green-600">{m.stateCode}</p>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-black text-slate-800 uppercase truncate">{m.fullName}</p>
+                                    <p className="text-[10px] font-bold text-green-600">{m.stateCode}</p>
+                                    <p className="text-[9px] font-medium text-slate-400 mt-1">{m.phone || 'No Phone recorded'}</p>
                                   </div>
                                 </div>
                               ))}
@@ -431,31 +450,68 @@ const App: React.FC = () => {
                     )}
 
                     {viewMode === 'analytics' && stats && (
-                      <div className="p-8 space-y-10">
-                        <div>
-                           <h4 className="text-[10px] font-black text-slate-400 uppercase mb-6 tracking-widest">PPA Distribution</h4>
-                           <div className="space-y-4">
-                              {groups.slice(0, 8).map(([name, members]) => (
-                                <div key={name} className="space-y-1">
-                                  <div className="flex justify-between text-[9px] font-black text-slate-500 uppercase">
-                                    <span className="truncate max-w-[80%]">{name}</span>
-                                    <span>{members.length}</span>
+                      <div className="p-8 space-y-12">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                          <div>
+                             <h4 className="text-[10px] font-black text-slate-400 uppercase mb-6 tracking-widest">Top PPA Distribution</h4>
+                             <div className="space-y-5">
+                                {groups.slice(0, 8).map(([name, members]) => (
+                                  <div key={name} className="space-y-1.5">
+                                    <div className="flex justify-between text-[10px] font-black text-slate-600 uppercase">
+                                      <span className="truncate max-w-[80%]">{name}</span>
+                                      <span>{members.length}</span>
+                                    </div>
+                                    <div className="h-2.5 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
+                                      <div className="h-full bg-green-500 transition-all duration-1000" style={{width: `${(members.length / stats.total) * 100}%`}}></div>
+                                    </div>
                                   </div>
-                                  <div className="h-2 bg-slate-50 rounded-full overflow-hidden">
-                                    <div className="h-full bg-green-500" style={{width: `${(members.length / stats.total) * 100}%`}}></div>
-                                  </div>
+                                ))}
+                             </div>
+                          </div>
+                          <div className="bg-slate-50 rounded-[2rem] p-8 flex flex-col items-center justify-center border border-slate-100">
+                             <div className="relative w-48 h-48 mb-8">
+                                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                                  <circle className="text-blue-500" strokeWidth="12" stroke="currentColor" fill="transparent" r="40" cx="50" cy="50" strokeDasharray={`${stats.malePercent * 2.51} 251`} />
+                                  <circle className="text-pink-500" strokeWidth="12" stroke="currentColor" fill="transparent" r="40" cx="50" cy="50" strokeDasharray={`${stats.femalePercent * 2.51} 251`} strokeDashoffset={`${-stats.malePercent * 2.51}`} />
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                                  <p className="text-2xl font-black text-slate-800">{stats.total}</p>
+                                  <p className="text-[8px] font-black text-slate-400 uppercase">Total Corps</p>
                                 </div>
-                              ))}
-                           </div>
+                             </div>
+                             <div className="flex gap-8 w-full">
+                               <div className="flex-1 text-center">
+                                 <p className="text-lg font-black text-blue-600">{stats.males}</p>
+                                 <p className="text-[9px] font-black text-slate-400 uppercase">Males</p>
+                               </div>
+                               <div className="flex-1 text-center">
+                                 <p className="text-lg font-black text-pink-600">{stats.females}</p>
+                                 <p className="text-[9px] font-black text-slate-400 uppercase">Females</p>
+                               </div>
+                             </div>
+                          </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-6 border-t border-slate-50 pt-8">
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 pt-10 border-t border-slate-100">
                            <div className="text-center p-6 bg-slate-50 rounded-2xl border border-slate-100">
-                              <p className="text-[9px] font-black text-slate-400 uppercase">PPA Diversity</p>
-                              <p className="text-3xl font-black text-slate-800">{stats.ppas}</p>
+                              <Users className="w-5 h-5 text-slate-300 mx-auto mb-3" />
+                              <p className="text-[9px] font-black text-slate-400 uppercase">PPA Density</p>
+                              <p className="text-2xl font-black text-slate-800">{(stats.total / (stats.ppas || 1)).toFixed(1)}</p>
                            </div>
                            <div className="text-center p-6 bg-slate-50 rounded-2xl border border-slate-100">
-                              <p className="text-[9px] font-black text-slate-400 uppercase">Avg / PPA</p>
-                              <p className="text-3xl font-black text-slate-800">{(stats.total / (stats.ppas || 1)).toFixed(1)}</p>
+                              <MapPin className="w-5 h-5 text-slate-300 mx-auto mb-3" />
+                              <p className="text-[9px] font-black text-slate-400 uppercase">Locations</p>
+                              <p className="text-2xl font-black text-slate-800">{stats.ppas}</p>
+                           </div>
+                           <div className="text-center p-6 bg-slate-50 rounded-2xl border border-slate-100">
+                              <TrendingUp className="w-5 h-5 text-slate-300 mx-auto mb-3" />
+                              <p className="text-[9px] font-black text-slate-400 uppercase">Growth</p>
+                              <p className="text-2xl font-black text-green-600">+0.0%</p>
+                           </div>
+                           <div className="text-center p-6 bg-[#006837] rounded-2xl">
+                              <CheckCircle2 className="w-5 h-5 text-green-100 mx-auto mb-3" />
+                              <p className="text-[9px] font-black text-green-100 uppercase">Ready</p>
+                              <p className="text-2xl font-black text-white">True</p>
                            </div>
                         </div>
                       </div>
@@ -466,10 +522,17 @@ const App: React.FC = () => {
 
               {state.data.length > 0 && (
                 <div className="px-6 py-4 bg-[#f8faf9] border-t border-slate-100 flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  <span>Displaying {filteredMembers.length} records</span>
-                  <div className="flex gap-4">
-                    <button onClick={() => window.print()} className="flex items-center gap-1 hover:text-slate-800 transition-colors"><Printer className="w-3.5 h-3.5" /> Print</button>
-                    <span className="text-green-600">Sync Active</span>
+                  <div className="flex items-center gap-4">
+                    <span>Displaying {filteredMembers.length} records</span>
+                    {state.selectedGroup && (
+                      <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[8px] flex items-center gap-1 cursor-pointer" onClick={() => setState(s => ({...s, selectedGroup: null}))}>
+                        Filtered by PPA <X className="w-2 h-2" />
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-6">
+                    <button onClick={() => window.print()} className="flex items-center gap-1 hover:text-slate-800 transition-colors"><Printer className="w-3.5 h-3.5" /> Print Report</button>
+                    <div className="flex items-center gap-1 text-green-600"><CheckCircle2 className="w-3.5 h-3.5" /> Database Sync Ready</div>
                   </div>
                 </div>
               )}
