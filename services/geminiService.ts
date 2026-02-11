@@ -1,24 +1,18 @@
-
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { ExtractionResponse } from "../types";
 
 export interface FileData {
-  data: string; // base64 for images/pdf, or raw text for csv
+  data: string; 
   mimeType: string;
   name: string;
 }
 
+/**
+ * Extracts personnel data and document metadata from NYSC lists.
+ */
 export const extractCorpsData = async (files: FileData[]): Promise<ExtractionResponse> => {
-  const apiKey = process.env.API_KEY;
-
-  if (!apiKey || apiKey === "undefined" || apiKey === "") {
-    throw new Error(
-      "Gemini API key is missing. Please ensure 'GEMINI_API_KEY' is set in your Netlify Site Settings and that you have triggered a new deploy."
-    );
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
-  const model = 'gemini-3-flash-preview';
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const model = 'gemini-3-pro-preview';
 
   const parts = files.map(file => {
     if (file.mimeType.startsWith('text/') || file.name.endsWith('.csv')) {
@@ -34,24 +28,36 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
   });
 
   const prompt = `
-    TASK: Precisely extract personnel data from the provided NYSC documents.
-    FORMAT: Strictly JSON. No markdown backticks. No preamble.
+    TASK: Precisely extract personnel data and document headers from the provided NYSC documents.
+    FORMAT: Strictly JSON.
     
-    FIELDS: 
+    METADATA EXTRACTION:
+    - lga: The Local Government name mentioned (e.g., "Mani Local Government")
+    - batchInfo: The Batch and Stream info (e.g., "Batch B Stream 1 and 2, December 2025")
+    - title: The main document title (e.g., "Monthly Clearance")
+    - datePrinted: Extract "Date Printed" value if available.
+
+    PERSONNEL FIELDS:
     - sn (Number)
-    - stateCode (String, format: NY/24B/1234)
-    - fullName (String, UPPERCASE)
+    - stateCode (String)
+    - surname (String)
+    - firstName (String)
+    - middleName (String, empty if not found)
     - gender (M/F)
-    - phone (String)
-    - companyName (String, the PPA or Organization name)
+    - phone (GSM number)
+    - companyName (PPA/Organization)
+    - attendanceDate (String, e.g. "03-11-2025")
+    - attendanceType (String, e.g. "Clearance")
+    - day (String, e.g. "Monday")
     
-    CRITICAL: 
-    Lists are usually grouped under an Organization/PPA header. Assign that header to every member in its section. 
-    If a phone number is missing, use "N/A".
+    RULES:
+    1. Split Names correctly. Surname is often the first name in a list or has its own column.
+    2. Normalize all text to TITLE CASE for Names and UPPERCASE for State Codes.
+    3. Ensure JSON structure matches the requested schema perfectly.
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response: GenerateContentResponse = await ai.models.generateContent({
       model,
       contents: { parts: [...parts, { text: prompt }] },
       config: {
@@ -59,20 +65,33 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
         responseSchema: {
           type: Type.OBJECT,
           properties: {
+            metadata: {
+              type: Type.OBJECT,
+              properties: {
+                lga: { type: Type.STRING },
+                batchInfo: { type: Type.STRING },
+                title: { type: Type.STRING },
+                datePrinted: { type: Type.STRING },
+              }
+            },
             members: {
               type: Type.ARRAY,
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  id: { type: Type.STRING },
                   sn: { type: Type.NUMBER },
                   stateCode: { type: Type.STRING },
-                  fullName: { type: Type.STRING },
+                  surname: { type: Type.STRING },
+                  firstName: { type: Type.STRING },
+                  middleName: { type: Type.STRING },
                   gender: { type: Type.STRING },
                   phone: { type: Type.STRING },
                   companyName: { type: Type.STRING },
+                  attendanceDate: { type: Type.STRING },
+                  attendanceType: { type: Type.STRING },
+                  day: { type: Type.STRING },
                 },
-                required: ["id", "sn", "stateCode", "fullName", "gender", "phone", "companyName"],
+                required: ["sn", "stateCode", "surname", "firstName", "gender"],
               },
             },
           },
@@ -81,21 +100,22 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
       },
     });
 
-    let text = response.text || "";
-    // Robust cleaning: strip markdown code blocks if the model ignored the config
-    text = text.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
+    const jsonStr = (response.text || "").trim();
+    const parsed = JSON.parse(jsonStr) as ExtractionResponse;
     
-    if (!text) throw new Error("Document could not be read. Please ensure the scan is clear.");
-    
-    const parsed = JSON.parse(text) as ExtractionResponse;
-    
-    parsed.members = (parsed.members || []).map(m => ({
-      ...m,
-      id: m.id || Math.random().toString(36).substr(2, 9),
-      gender: (m.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M',
-      fullName: (m.fullName || 'Unknown').toUpperCase(),
-      companyName: (m.companyName || 'UNASSIGNED').toUpperCase()
-    })).sort((a, b) => (a.sn || 0) - (b.sn || 0));
+    parsed.members = (parsed.members || []).map((m, index) => {
+      return {
+        ...m,
+        id: Math.random().toString(36).substr(2, 9),
+        surname: (m.surname || '').trim(),
+        firstName: (m.firstName || '').trim(),
+        middleName: (m.middleName || '').trim(),
+        gender: (m.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M',
+        stateCode: (m.stateCode || '').toUpperCase().trim(),
+        phone: (m.phone || 'N/A').trim(),
+        companyName: (m.companyName || 'N/A').trim()
+      };
+    }).sort((a, b) => (a.sn || 0) - (b.sn || 0));
     
     return parsed;
   } catch (error: any) {
