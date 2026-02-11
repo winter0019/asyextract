@@ -11,7 +11,7 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
   const apiKey = process.env.API_KEY;
 
   if (!apiKey || apiKey === "undefined") {
-    throw new Error("API_KEY is missing. Please set the API_KEY environment variable in your Netlify dashboard settings.");
+    throw new Error("Gemini API key is missing. Please set the 'GEMINI_API_KEY' environment variable in your Netlify dashboard settings.");
   }
 
   // Use the standard pattern for API key initialization
@@ -98,7 +98,7 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
   } catch (error: any) {
     console.error("Gemini Extraction Error:", error);
     if (error.message?.includes("API key")) {
-      throw new Error("Invalid or missing API Key. Ensure the 'API_KEY' variable is set correctly in your Netlify settings.");
+      throw new Error("Invalid or missing API Key. Ensure the 'GEMINI_API_KEY' variable is set correctly in your Netlify settings.");
     }
     throw error;
   }
