@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { ExtractionResponse } from "../types";
 
@@ -8,12 +9,11 @@ export interface FileData {
 }
 
 export const extractCorpsData = async (files: FileData[]): Promise<ExtractionResponse> => {
-  // In our Vite setup, process.env.API_KEY is replaced with the value of GEMINI_API_KEY at build time.
   const apiKey = process.env.API_KEY;
 
   if (!apiKey || apiKey === "undefined" || apiKey === "") {
     throw new Error(
-      "Gemini API key is missing. Please ensure 'GEMINI_API_KEY' is set in your Netlify Site Settings under 'Build & deploy' > 'Environment variables', and that you have triggered a new deploy after saving."
+      "Gemini API key is missing. Please ensure 'GEMINI_API_KEY' is set in your Netlify Site Settings and that you have triggered a new deploy."
     );
   }
 
@@ -24,9 +24,7 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
     if (file.mimeType.startsWith('text/') || file.name.endsWith('.csv')) {
       return { text: `Source Document (${file.name}):\n${file.data}` };
     }
-    
     const base64Data = file.data.includes(',') ? file.data.split(',')[1] : file.data;
-    
     return {
       inlineData: {
         data: base64Data,
@@ -37,16 +35,19 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
 
   const prompt = `
     TASK: Precisely extract personnel data from the provided NYSC documents.
-    FIELDS: Serial Number (SN), State Code (e.g., NY/24B/1234), Full Name, Gender (M/F), Phone Number, and PPA (Organization).
+    FORMAT: Strictly JSON. No markdown backticks. No preamble.
     
-    CONTEXTUAL GROUPING:
-    Clearance lists are often grouped by PPA. The name of the PPA/Organization usually appears once as a header or title above a list of names. 
-    You MUST assign that header to every member in that section.
+    FIELDS: 
+    - sn (Number)
+    - stateCode (String, format: NY/24B/1234)
+    - fullName (String, UPPERCASE)
+    - gender (M/F)
+    - phone (String)
+    - companyName (String, the PPA or Organization name)
     
-    CLEANING RULES:
-    - Convert names to UPPERCASE.
-    - Ensure State Code matches the NY/XX/XXXX format.
-    - Return a valid JSON object.
+    CRITICAL: 
+    Lists are usually grouped under an Organization/PPA header. Assign that header to every member in its section. 
+    If a phone number is missing, use "N/A".
   `;
 
   try {
@@ -80,8 +81,11 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
       },
     });
 
-    const text = response.text;
-    if (!text) throw new Error("The AI model returned an empty response. Please check the document clarity.");
+    let text = response.text || "";
+    // Robust cleaning: strip markdown code blocks if the model ignored the config
+    text = text.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
+    
+    if (!text) throw new Error("Document could not be read. Please ensure the scan is clear.");
     
     const parsed = JSON.parse(text) as ExtractionResponse;
     
@@ -95,10 +99,7 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
     
     return parsed;
   } catch (error: any) {
-    console.error("Gemini Extraction Error:", error);
-    if (error.message?.includes("API key")) {
-      throw new Error("The provided API key is invalid. Please check your 'GEMINI_API_KEY' in Netlify.");
-    }
+    console.error("Extraction Error:", error);
     throw error;
   }
 };
