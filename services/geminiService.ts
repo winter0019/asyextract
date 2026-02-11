@@ -8,23 +8,23 @@ export interface FileData {
 }
 
 export const extractCorpsData = async (files: FileData[]): Promise<ExtractionResponse> => {
+  // In our Vite setup, process.env.API_KEY is replaced with the value of GEMINI_API_KEY at build time.
   const apiKey = process.env.API_KEY;
 
-  if (!apiKey || apiKey === "undefined") {
-    throw new Error("Gemini API key is missing. Please set the 'GEMINI_API_KEY' environment variable in your Netlify dashboard settings.");
+  if (!apiKey || apiKey === "undefined" || apiKey === "") {
+    throw new Error(
+      "Gemini API key is missing. Please ensure 'GEMINI_API_KEY' is set in your Netlify Site Settings under 'Build & deploy' > 'Environment variables', and that you have triggered a new deploy after saving."
+    );
   }
 
-  // Use the standard pattern for API key initialization
   const ai = new GoogleGenAI({ apiKey });
   const model = 'gemini-3-flash-preview';
 
   const parts = files.map(file => {
-    // Handle text files vs images
     if (file.mimeType.startsWith('text/') || file.name.endsWith('.csv')) {
       return { text: `Source Document (${file.name}):\n${file.data}` };
     }
     
-    // Clean base64 data if it contains the data: prefix
     const base64Data = file.data.includes(',') ? file.data.split(',')[1] : file.data;
     
     return {
@@ -85,7 +85,6 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
     
     const parsed = JSON.parse(text) as ExtractionResponse;
     
-    // Final data normalization
     parsed.members = (parsed.members || []).map(m => ({
       ...m,
       id: m.id || Math.random().toString(36).substr(2, 9),
@@ -98,7 +97,7 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
   } catch (error: any) {
     console.error("Gemini Extraction Error:", error);
     if (error.message?.includes("API key")) {
-      throw new Error("Invalid or missing API Key. Ensure the 'GEMINI_API_KEY' variable is set correctly in your Netlify settings.");
+      throw new Error("The provided API key is invalid. Please check your 'GEMINI_API_KEY' in Netlify.");
     }
     throw error;
   }
