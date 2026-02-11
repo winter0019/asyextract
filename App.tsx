@@ -369,8 +369,8 @@ const App: React.FC = () => {
                     <th className="px-6 py-4">Firstname</th>
                     <th className="px-6 py-4">Middle Name</th>
                     <th className="px-6 py-4">Gender</th>
-                    {mode === 'plain' || showPPA ? <th className="px-6 py-4">Organization (PPA)</th> : null}
-                    {mode === 'plain' || showGSM ? <th className="px-6 py-4">Phone No</th> : null}
+                    {(mode === 'plain' || showPPA) && <th className="px-6 py-4">Organization (PPA)</th>}
+                    {(mode === 'plain' || showGSM) && <th className="px-6 py-4">Phone No</th>}
                     <th className="px-6 py-4 text-right">Delete</th>
                   </tr>
                 </thead>
