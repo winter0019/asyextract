@@ -4,7 +4,8 @@ import {
   Upload, Users, Trash2, Search, 
   Loader2, AlertCircle, FileSpreadsheet,
   Printer, X, LayoutGrid, Plus, Scan, Building2,
-  ChevronLeft, BadgeCheck, Phone, EyeOff, FileText, Smartphone, Hash
+  ChevronLeft, BadgeCheck, Phone, EyeOff, FileText, Smartphone, Hash,
+  Heart, Github
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -20,10 +21,10 @@ const App: React.FC = () => {
     processingStep: 'idle',
     data: [],
     metadata: {
-      lga: 'Mani Local Government',
-      batchInfo: 'Batch B Stream 1 and 2, December 2025',
+      lga: 'Local Government Area',
+      batchInfo: 'Batch B Stream 1, 2025',
       title: 'Monthly Clearance',
-      datePrinted: 'December 22, 2025'
+      datePrinted: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     },
     error: null,
     selectedGroup: null,
@@ -103,7 +104,7 @@ const App: React.FC = () => {
     const lastSn = editableData.length > 0 ? Math.max(...editableData.map(m => m.sn)) : 0;
     const newMember: CorpsMember = {
       id: `manual-${Date.now()}`,
-      sn: lastSn + 1,
+      sn: isNaN(lastSn) ? 1 : lastSn + 1,
       stateCode: '',
       surname: '',
       firstName: '',
@@ -124,21 +125,27 @@ const App: React.FC = () => {
     if (mode === 'official') {
       const NYSC_GREEN = [0, 104, 55];
       const BLUE_LINE = [0, 0, 255];
+      
+      // Logo Placeholder
       doc.setDrawColor(0);
       doc.setLineWidth(0.1);
       doc.circle(28, 25, 14); 
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7);
       doc.text('NYSC LOGO', 28, 26, { align: 'center' });
+      
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(26);
       doc.setTextColor(NYSC_GREEN[0], NYSC_GREEN[1], NYSC_GREEN[2]);
       doc.text('National Youth Service Corps', pageWidth / 2 + 10, 22, { align: 'center' });
+      
       doc.setFontSize(18);
       doc.setTextColor(0, 0, 0);
       doc.text(editableMetadata.lga || '', pageWidth / 2 + 10, 31, { align: 'center' });
+      
       doc.setFontSize(16);
       doc.text(`${editableMetadata.title || 'Clearance'} - ${editableMetadata.batchInfo || ''}`, pageWidth / 2 + 10, 40, { align: 'center' });
+      
       doc.setDrawColor(BLUE_LINE[0], BLUE_LINE[1], BLUE_LINE[2]);
       doc.setLineWidth(1.2);
       doc.line(14, 52, pageWidth - 14, 52);
@@ -222,9 +229,11 @@ const App: React.FC = () => {
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Personnel Management</p>
           </div>
         </div>
-        <button onClick={generatePDF} className="bg-[#006837] text-white px-8 py-3 rounded-2xl text-xs font-black flex items-center gap-2 shadow-xl hover:shadow-[#006837]/20 transition-all active:scale-95">
-          <Printer size={18}/> Export PDF
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={generatePDF} className="bg-[#006837] text-white px-8 py-3 rounded-2xl text-xs font-black flex items-center gap-2 shadow-xl hover:shadow-[#006837]/20 transition-all active:scale-95">
+            <Printer size={18}/> Export PDF
+          </button>
+        </div>
       </header>
 
       <main className="max-w-7xl mx-auto w-full p-8 space-y-8">
@@ -236,7 +245,7 @@ const App: React.FC = () => {
                 <input 
                   type="text" 
                   placeholder="Search names or codes..." 
-                  className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-[#006837]/5 transition-all" 
+                  className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-[#006837]/5 transition-all outline-none" 
                   value={searchTerm} 
                   onChange={e => setSearchTerm(e.target.value)} 
                 />
@@ -257,15 +266,15 @@ const App: React.FC = () => {
               <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6">
                  <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">LGA</label>
-                    <input className="w-full bg-slate-50 p-3 rounded-xl text-sm font-bold border-none focus:ring-2 focus:ring-[#006837]" value={editableMetadata.lga} onChange={e => setEditableMetadata({...editableMetadata, lga: e.target.value})} />
+                    <input className="w-full bg-slate-50 p-3 rounded-xl text-sm font-bold border-none focus:ring-2 focus:ring-[#006837] outline-none" value={editableMetadata.lga} onChange={e => setEditableMetadata({...editableMetadata, lga: e.target.value})} />
                  </div>
                  <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Batch Info</label>
-                    <input className="w-full bg-slate-50 p-3 rounded-xl text-sm font-bold border-none focus:ring-2 focus:ring-[#006837]" value={editableMetadata.batchInfo} onChange={e => setEditableMetadata({...editableMetadata, batchInfo: e.target.value})} />
+                    <input className="w-full bg-slate-50 p-3 rounded-xl text-sm font-bold border-none focus:ring-2 focus:ring-[#006837] outline-none" value={editableMetadata.batchInfo} onChange={e => setEditableMetadata({...editableMetadata, batchInfo: e.target.value})} />
                  </div>
                  <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Title</label>
-                    <input className="w-full bg-slate-50 p-3 rounded-xl text-sm font-bold border-none focus:ring-2 focus:ring-[#006837]" value={editableMetadata.title} onChange={e => setEditableMetadata({...editableMetadata, title: e.target.value})} />
+                    <input className="w-full bg-slate-50 p-3 rounded-xl text-sm font-bold border-none focus:ring-2 focus:ring-[#006837] outline-none" value={editableMetadata.title} onChange={e => setEditableMetadata({...editableMetadata, title: e.target.value})} />
                  </div>
               </div>
             )}
@@ -277,7 +286,9 @@ const App: React.FC = () => {
                 <input type="file" multiple className="hidden" onChange={handleFileUpload} />
                 <div className="w-full flex flex-col items-center justify-center py-6 border-2 border-dashed border-slate-200 rounded-2xl group-hover:border-[#006837] group-hover:bg-emerald-50/30 transition-all">
                   <Upload className="w-8 h-8 text-slate-300 group-hover:text-[#006837] mb-2" />
-                  <span className="text-[10px] font-black uppercase text-slate-400 group-hover:text-slate-600">{uploadedFiles.length ? `${uploadedFiles.length} Selected` : 'Upload Documents'}</span>
+                  <span className="text-[10px] font-black uppercase text-slate-400 group-hover:text-slate-600">
+                    {uploadedFiles.length ? `${uploadedFiles.length} File(s) Ready` : 'Upload Clearances'}
+                  </span>
                 </div>
               </label>
               <button 
@@ -285,13 +296,13 @@ const App: React.FC = () => {
                 disabled={state.isProcessing || !uploadedFiles.length} 
                 className="w-full py-4 bg-[#006837] text-white rounded-2xl text-sm font-black disabled:opacity-30 shadow-lg shadow-emerald-900/10 active:scale-95 transition-all"
               >
-                {state.isProcessing ? <Loader2 className="animate-spin mx-auto" size={20} /> : 'Start Extraction'}
+                {state.isProcessing ? <Loader2 className="animate-spin mx-auto" size={20} /> : 'Extract Data'}
               </button>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between px-2">
+        <div className="flex flex-col md:flex-row items-center justify-between px-2 gap-4">
           <div className="flex gap-4">
             <div className="bg-white px-6 py-3 rounded-2xl border border-slate-200 flex items-center gap-6 shadow-sm">
               <div className="flex flex-col"><span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total</span><span className="text-xl font-black">{stats.total}</span></div>
@@ -308,14 +319,14 @@ const App: React.FC = () => {
             )}
           </div>
           <button onClick={addNewMember} className="bg-white border-2 border-slate-100 hover:border-[#006837] px-8 py-4 rounded-[2rem] text-xs font-black text-[#006837] flex items-center gap-3 transition-all active:scale-95 group shadow-sm">
-            <Plus size={20} className="group-hover:rotate-90 transition-transform" /> Add Row (Write Details)
+            <Plus size={20} className="group-hover:rotate-90 transition-transform" /> Add Row
           </button>
         </div>
 
         {state.isProcessing ? (
           <div className="p-32 text-center bg-white rounded-[3rem] border border-slate-100 space-y-6">
             <div className="loading-spinner mx-auto w-12 h-12"></div>
-            <p className="text-slate-500 font-black animate-pulse uppercase tracking-[0.2em] text-xs">AI Vision Engaged - Splitting Names & Mapping PPAs</p>
+            <p className="text-slate-500 font-black animate-pulse uppercase tracking-[0.2em] text-xs">AI OCR in Progress - Extracting Personal Details</p>
           </div>
         ) : editableData.length > 0 ? (
           <div className="bg-white border border-slate-200 rounded-[2.5rem] overflow-hidden shadow-sm">
@@ -385,21 +396,43 @@ const App: React.FC = () => {
                 </tbody>
               </table>
               {filteredData.length === 0 && (
-                <div className="p-20 text-center text-slate-400 font-medium italic">No results matching your filters.</div>
+                <div className="p-20 text-center text-slate-400 font-medium italic">No personnel found. Use the Search or Filter fields above.</div>
               )}
             </div>
           </div>
         ) : (
-          <div className="bg-white border-4 border-dashed border-slate-100 rounded-[4rem] p-32 text-center space-y-10">
+          <div className="bg-white border-4 border-dashed border-slate-100 rounded-[4rem] p-24 text-center space-y-10">
             <div className="bg-slate-50 p-12 rounded-full w-fit mx-auto border-4 border-white shadow-inner">
               <FileText className="w-20 h-20 text-slate-200" />
             </div>
             <div className="space-y-4 max-w-sm mx-auto">
-              <h2 className="text-4xl font-black text-slate-900 leading-none">Awaiting Data</h2>
-              <p className="text-slate-400 font-medium leading-relaxed">Upload a document scan to extract details, or manually write member information using the "Add Row" tool.</p>
+              <h2 className="text-4xl font-black text-slate-900 leading-none">Ready for Extraction</h2>
+              <p className="text-slate-400 font-medium leading-relaxed">Upload a document to automatically populate the list, or start manually by clicking "Add Row".</p>
             </div>
           </div>
         )}
       </main>
 
-      <footer className="mt-auto py-12 text-center border-t border-slate-100 bg
+      <footer className="mt-auto py-12 bg-white border-t border-slate-100">
+        <div className="max-w-7xl mx-auto px-8 flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="flex items-center gap-3">
+            <div className="bg-[#006837] p-2 rounded-lg">
+              <BadgeCheck className="text-white w-5 h-5" />
+            </div>
+            <span className="text-sm font-black text-slate-900">NYSC EXTRACT TOOL</span>
+          </div>
+          
+          <div className="flex items-center gap-6 text-slate-400">
+            <a href="#" className="hover:text-slate-900 transition-colors"><Github size={20} /></a>
+            <div className="h-4 w-[1px] bg-slate-200" />
+            <p className="text-xs font-medium flex items-center gap-1.5 uppercase tracking-widest">
+              Built with <Heart size={12} className="text-rose-500 fill-rose-500" /> for NYSC Personnel
+            </p>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+export default App;
