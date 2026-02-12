@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { ExtractionResponse } from "../types";
 
@@ -8,11 +9,12 @@ export interface FileData {
 }
 
 /**
- * Extracts personnel data and document metadata from NYSC lists.
+ * Extracts personnel data and document metadata from NYSC lists using Gemini Flash.
  */
 export const extractCorpsData = async (files: FileData[]): Promise<ExtractionResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const model = 'gemini-3-pro-preview';
+  // Using Flash for better quota availability and speed on structured extraction tasks.
+  const model = 'gemini-3-flash-preview';
 
   const parts = files.map(file => {
     if (file.mimeType.startsWith('text/') || file.name.endsWith('.csv')) {
@@ -51,9 +53,10 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
     - day (String, e.g. "Monday")
     
     RULES:
-    1. Split Names correctly. Surname is often the first name in a list or has its own column.
+    1. If a name column exists, split it: typically Surname is the first word or separated by a comma.
     2. Normalize all text to TITLE CASE for Names and UPPERCASE for State Codes.
-    3. Ensure JSON structure matches the requested schema perfectly.
+    3. Ensure SN is strictly a number.
+    4. If gender is not clear, use 'M' as default.
   `;
 
   try {
@@ -103,7 +106,7 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
     const jsonStr = (response.text || "").trim();
     const parsed = JSON.parse(jsonStr) as ExtractionResponse;
     
-    parsed.members = (parsed.members || []).map((m, index) => {
+    parsed.members = (parsed.members || []).map((m) => {
       return {
         ...m,
         id: Math.random().toString(36).substr(2, 9),
@@ -112,8 +115,8 @@ export const extractCorpsData = async (files: FileData[]): Promise<ExtractionRes
         middleName: (m.middleName || '').trim(),
         gender: (m.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M',
         stateCode: (m.stateCode || '').toUpperCase().trim(),
-        phone: (m.phone || 'N/A').trim(),
-        companyName: (m.companyName || 'N/A').trim()
+        phone: (m.phone || '').trim(),
+        companyName: (m.companyName || '').trim()
       };
     }).sort((a, b) => (a.sn || 0) - (b.sn || 0));
     
